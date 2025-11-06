@@ -1,0 +1,6 @@
+.env
+users.sqlite
+node_modules/
+dist/
+build/
+*.log
