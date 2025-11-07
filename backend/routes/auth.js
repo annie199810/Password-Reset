@@ -5,13 +5,13 @@ const { v4: uuidv4 } = require('uuid');
 const bcrypt = require('bcrypt');
 const { sendResetEmail } = require('../utils/mailer');
 
-// --- simple logger for debugging
+
 router.use((req, res, next) => {
   console.log(`[AUTH ROUTER] ${req.method} ${req.originalUrl}`);
   next();
 });
 
-// --- health/info route so GET /api/auth returns 200
+
 router.get('/', (req, res) => {
   res.json({
     status: 'ok',

@@ -10,13 +10,19 @@ const bcrypt = require('bcrypt');
 const { v4: uuidv4 } = require('uuid');
 
 const app = express();
+
+
+app.set('trust proxy', true); 
 app.use(cors());
 app.use(bodyParser.json());
 
-const TEST_EMAIL = 'test@example.com';
-const TEST_PWD = 'Test@1234';
 
-// --- Root / health route to avoid 404 at /
+app.use((req, res, next) => {
+  console.log(`[${new Date().toISOString()}] ${req.method} ${req.originalUrl}`);
+  next();
+});
+
+
 app.get('/', (req, res) => {
   res.status(200).json({
     status: 'ok',
@@ -24,32 +30,74 @@ app.get('/', (req, res) => {
   });
 });
 
-// Mount API routes
+
 app.use('/api/auth', auth);
 
-// --- Serve frontend build if it exists (optional)
+
 const CLIENT_BUILD_PATH = path.join(__dirname, '..', 'frontend', 'build');
 if (fs.existsSync(CLIENT_BUILD_PATH)) {
   console.log('Detected frontend build. Serving static files from:', CLIENT_BUILD_PATH);
   app.use(express.static(CLIENT_BUILD_PATH));
 
-  // For any other route not handled by API, serve index.html (SPA support)
+  
   app.get('*', (req, res) => {
+    
+    if (req.path.startsWith('/api/')) {
+      return res.status(404).json({ error: 'API route not found' });
+    }
     res.sendFile(path.join(CLIENT_BUILD_PATH, 'index.html'));
   });
 }
 
+const TEST_EMAIL = 'test@example.com';
+const TEST_PWD = 'Test@1234';
+
 const PORT = process.env.PORT || 4000;
+let server = null;
+let started = false;
 
 function startServer() {
-  app.listen(PORT, () => console.log(`Server running on ${PORT}`));
+  if (started) return;
+  started = true;
+
+  server = app.listen(PORT, () => {
+    console.log(`Server running on ${PORT} (NODE_ENV=${process.env.NODE_ENV || 'development'})`);
+  });
+
+  const shutdown = (sig) => {
+    console.log(`Received ${sig} — closing server...`);
+    if (server) {
+      server.close(() => {
+        console.log('Server closed.');
+        process.exit(0);
+      });
+   
+      setTimeout(() => {
+        console.warn('Forcing shutdown.');
+        process.exit(1);
+      }, 10000).unref();
+    } else {
+      process.exit(0);
+    }
+  };
+
+  process.on('SIGINT', () => shutdown('SIGINT'));
+  process.on('SIGTERM', () => shutdown('SIGTERM'));
+
+
+  process.on('uncaughtException', (err) => {
+    console.error('Uncaught exception:', err && (err.stack || err));
+  });
+  process.on('unhandledRejection', (reason) => {
+    console.error('Unhandled Rejection:', reason && (reason.stack || reason));
+  });
 }
 
-// Seed test user, then start server
+
 db.get('SELECT * FROM users WHERE email = ?', [TEST_EMAIL], async (err, row) => {
   if (err) {
     console.error('DB error during seed check:', err);
-    // continue and start server so app is available for debugging
+    
     return startServer();
   }
 
