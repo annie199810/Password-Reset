@@ -2,29 +2,51 @@ import React, { useState } from 'react';
 
 export default function ForgotPassword() {
   const [email, setEmail] = useState('');
-  const [status, setStatus] = useState({ type:'', text:'' });
+  const [status, setStatus] = useState({ type: '', text: '' });
   const [loading, setLoading] = useState(false);
+  const [previewUrl, setPreviewUrl] = useState(null);
 
-  function validateEmail(e){ return /\S+@\S+\.\S+/.test(e); }
+  function validateEmail(e) { return /\S+@\S+\.\S+/.test(e); }
 
-  async function submit(e){
+  async function submit(e) {
     e.preventDefault();
-    setStatus({type:'', text:''});
-    if(!validateEmail(email)){ setStatus({type:'error', text:'Please enter a valid email.'}); return; }
+    setStatus({ type: '', text: '' });
+    setPreviewUrl(null);
+
+    if (!validateEmail(email)) {
+      setStatus({ type: 'error', text: 'Please enter a valid email.' });
+      return;
+    }
+
     setLoading(true);
-    try{
-      const res = await fetch(`${process.env.REACT_APP_API_URL || 'http://localhost:4000'}/api/auth/request-reset`, {
-        method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ email })
+
+    const API = process.env.REACT_APP_API_URL || 'http://localhost:4000';
+
+    try {
+      const res = await fetch(`${API}/api/auth/request-reset`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email })
       });
+
       const data = await res.json();
       setLoading(false);
-      if(res.ok){
-        const message = data.previewUrl ? `Preview: ${data.previewUrl}` : 'If the email exists, a reset link has been sent.';
-        setStatus({ type:'success', text: message });
-      } else setStatus({type:'error', text: data.error || 'Something went wrong.'});
-    }catch(err){
+
+      if (res.ok) {
+        
+        if (data && data.previewUrl) {
+          setPreviewUrl(data.previewUrl);
+          setStatus({ type: 'success', text: 'Preview link returned — open it to view the reset email.' });
+        } else {
+          setStatus({ type: 'success', text: 'If the email exists, a reset link has been sent.' });
+        }
+      } else {
+        setStatus({ type: 'error', text: data && data.error ? data.error : 'Something went wrong.' });
+      }
+    } catch (err) {
       setLoading(false);
-      setStatus({type:'error', text:'Cannot connect to server. Please make sure backend is running.'});
+      console.error('Request error:', err);
+      setStatus({ type: 'error', text: 'Cannot connect to server. Please make sure backend is running.' });
     }
   }
 
@@ -45,8 +67,15 @@ export default function ForgotPassword() {
         </div>
 
         {status.text && (
-          <div className={`mt-3 alert ${status.type==='success' ? 'alert-success' : 'alert-danger'}`} role="alert">
+          <div className={`mt-3 alert ${status.type === 'success' ? 'alert-success' : 'alert-danger'}`} role="alert">
             {status.text}
+          </div>
+        )}
+
+        {previewUrl && (
+          <div className="mt-2">
+            <div style={{ marginBottom: 6, fontSize: 14, color: '#444' }}>Preview URL (demo):</div>
+            <a href={previewUrl} target="_blank" rel="noopener noreferrer">{previewUrl}</a>
           </div>
         )}
 
@@ -54,7 +83,7 @@ export default function ForgotPassword() {
           {loading ? 'Sending…' : 'Send reset link'}
         </button>
 
-        <div className="note">
+        <div className="note" style={{ marginTop: 12 }}>
           Use seeded test account <strong>test@example.com</strong> for demo (Ethereal preview).
         </div>
       </form>
