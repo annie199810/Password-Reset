@@ -5,6 +5,20 @@ const { v4: uuidv4 } = require('uuid');
 const bcrypt = require('bcrypt');
 const { sendResetEmail } = require('../utils/mailer');
 
+// --- simple logger for debugging
+router.use((req, res, next) => {
+  console.log(`[AUTH ROUTER] ${req.method} ${req.originalUrl}`);
+  next();
+});
+
+// --- health/info route so GET /api/auth returns 200
+router.get('/', (req, res) => {
+  res.json({
+    status: 'ok',
+    message: 'Auth router is mounted',
+    available: ['POST /request-reset', 'POST /reset-password']
+  });
+});
 
 router.post('/request-reset', async (req, res) => {
   const { email } = req.body;
@@ -31,7 +45,6 @@ router.post('/request-reset', async (req, res) => {
     });
   });
 });
-
 
 router.post('/reset-password', async (req, res) => {
   const { email, token, password } = req.body;
