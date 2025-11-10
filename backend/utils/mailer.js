@@ -17,7 +17,10 @@ async function createTransporter() {
         connectionTimeout: 10000,
         greetingTimeout: 10000,
         socketTimeout: 10000,
-        tls: { rejectUnauthorized: false },
+        tls: { 
+          rejectUnauthorized: false,
+          ciphers: 'SSLv3'   
+        },
       });
 
       await transporter.verify();
@@ -28,7 +31,7 @@ async function createTransporter() {
     }
   }
 
- 
+
   const testAccount = await nodemailer.createTestAccount();
   const transporter = nodemailer.createTransport({
     host: 'smtp.ethereal.email',
