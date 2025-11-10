@@ -1,60 +1,29 @@
 
 const nodemailer = require('nodemailer');
 
-async function createTransporter() {
-  const host = process.env.EMAIL_HOST;
-  const port = process.env.EMAIL_PORT;
-  const user = process.env.EMAIL_USER;
-  const pass = process.env.EMAIL_PASS;
-
-  if (host && user && pass) {
-    try {
-      const transporter = nodemailer.createTransport({
-        host,
-        port: Number(port) || 587,
-        secure: false,
-        auth: { user, pass },
-        connectionTimeout: 10000,
-        greetingTimeout: 10000,
-        socketTimeout: 10000,
-        tls: { rejectUnauthorized: false },
-      });
-
-      await transporter.verify();
-      console.log('Mailer: using SMTP', host);
-      return { transporter, previewFn: () => null };
-    } catch (err) {
-      console.warn('Mailer: SMTP verify failed — falling back to Ethereal. Error:', err && err.message);
-    }
+const transporter = nodemailer.createTransport({
+  host: process.env.EMAIL_HOST || 'smtp.sendgrid.net',
+  port: Number(process.env.EMAIL_PORT) || 587,
+  secure: false, 
+  auth: {
+    user: process.env.EMAIL_USER || 'apikey', 
+    pass: process.env.EMAIL_PASS 
   }
+});
 
-  const testAccount = await nodemailer.createTestAccount();
-  const transporter = nodemailer.createTransport({
-    host: 'smtp.ethereal.email',
-    port: 587,
-    secure: false,
-    auth: { user: testAccount.user, pass: testAccount.pass },
+async function sendResetEmail(toEmail, resetToken) {
+  const resetLink = `${process.env.FRONTEND_URL || 'http://localhost:3000'}/reset-password?token=${encodeURIComponent(resetToken)}`;
+
+  const info = await transporter.sendMail({
+    from: process.env.FROM_EMAIL || '"Your App" <no-reply@yourapp.com>',
+    to: toEmail,
+    subject: 'Password reset',
+    text: `Reset link: ${resetLink}`,
+    html: `<p>Reset: <a href="${resetLink}">${resetLink}</a></p>`
   });
-  console.log('Mailer: using Ethereal test account:', testAccount.user);
-  return { transporter, previewFn: info => nodemailer.getTestMessageUrl(info) || null };
+
+  console.log('sendMail info:', info);
+  return info;
 }
 
-async function sendResetEmail(toEmail, link) {
-  try {
-    const { transporter, previewFn } = await createTransporter();
-    const info = await transporter.sendMail({
-      from: `"Password Reset" <${process.env.FROM_EMAIL || 'no-reply@example.com'}>`,
-      to: toEmail,
-      subject: 'Password reset — GUVI task',
-      html: `Click <a href="${link}">here</a> to reset your password. Link valid for 1 hour.`,
-    });
-    const previewUrl = previewFn ? previewFn(info) : null;
-    console.log('Mailer: messageId=', info.messageId, 'previewUrl=', previewUrl);
-    return { ok: true, previewUrl };
-  } catch (err) {
-    console.error('Mailer error:', err && (err.stack || err.message || err));
-    throw new Error('Failed to send email');
-  }
-}
-
-module.exports = { sendResetEmail };
+module.exports = { transporter, sendResetEmail };
