@@ -108,14 +108,6 @@ router.post('/reset-password', async (req, res) => {
   );
 });
 
-/* 
-   
-router.get('/debug-users', (req, res) => {
-  db.all('SELECT email, reset_token, reset_expires FROM users', (err, rows) => {
-    if (err) return res.status(500).json({ error: err.message });
-    res.json(rows);
-  });
-});
-*/
+
 
 module.exports = router;
