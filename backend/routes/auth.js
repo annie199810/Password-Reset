@@ -1,7 +1,7 @@
 
 const express = require('express');
 const crypto = require('crypto');
-const { sendResetEmail } = require('../mail'); 
+const { sendResetEmail } = require('../utils/mailer');
 const router = express.Router();
 
 router.post('/request-reset', async (req, res) => {
