@@ -1,49 +1,52 @@
-// backend/utils/mailer.js
+
 const nodemailer = require('nodemailer');
+const sgMail = require('@sendgrid/mail');
 
-const host = process.env.EMAIL_HOST || 'smtp.ethereal.email';
-const port = Number(process.env.EMAIL_PORT) || 587;
-const user = process.env.EMAIL_USER || '';
-const pass = process.env.EMAIL_PASS || '';
+const FRONTEND_URL = (process.env.FRONTEND_URL || 'http://localhost:3000').replace(/\/$/, '');
 
-let transporter;
+async function sendViaSendGrid(toEmail, resetLink) {
+  const key = process.env.SENDGRID_API_KEY;
+  if (!key) throw new Error('No SENDGRID_API_KEY');
+  sgMail.setApiKey(key);
 
-if (user && pass) {
-  transporter = nodemailer.createTransport({
-    host,
-    port,
-    secure: port === 465, // true for 465, false for other ports
-    auth: {
-      user,
-      pass
-    },
-    // optional timeouts for production
-    connectionTimeout: 10000,
-    greetingTimeout: 10000,
-    socketTimeout: 10000
-  });
-} else {
-  // No credentials -> create a test account (useful for local dev)
-  transporter = null;
+  const msg = {
+    to: toEmail,
+    from: process.env.FROM_EMAIL || 'no-reply@secureapp.com',
+    subject: 'Password reset',
+    text: `Reset link: ${resetLink}`,
+    html: `<p>Click to reset your password: <a href="${resetLink}">${resetLink}</a></p>`,
+  };
+
+  const res = await sgMail.send(msg);
+  
+  return { info: res, previewUrl: null };
 }
 
-async function sendResetEmail(toEmail, resetToken) {
-  const frontendUrl = (process.env.FRONTEND_URL || 'http://localhost:3000').replace(/\/$/, '');
-  const resetLink = `${frontendUrl}/reset-password?token=${encodeURIComponent(resetToken)}&email=${encodeURIComponent(toEmail)}`;
+async function sendViaSmtp(toEmail, resetLink) {
+  const host = process.env.EMAIL_HOST || 'smtp.ethereal.email';
+  const port = Number(process.env.EMAIL_PORT) || 587;
+  const user = process.env.EMAIL_USER || '';
+  const pass = process.env.EMAIL_PASS || '';
 
-  // If no configured transporter, create a test account (development)
-  let usedTransporter = transporter;
-  let createdTestAccount = null;
-  if (!usedTransporter) {
-    createdTestAccount = await nodemailer.createTestAccount();
-    usedTransporter = nodemailer.createTransport({
+  let transporter;
+  if (user && pass) {
+    transporter = nodemailer.createTransport({
+      host,
+      port,
+      secure: port === 465,
+      auth: { user, pass },
+      connectionTimeout: 10000,
+      greetingTimeout: 10000,
+      socketTimeout: 10000
+    });
+  } else {
+    
+    const testAcct = await nodemailer.createTestAccount();
+    transporter = nodemailer.createTransport({
       host: 'smtp.ethereal.email',
       port: 587,
       secure: false,
-      auth: {
-        user: createdTestAccount.user,
-        pass: createdTestAccount.pass
-      }
+      auth: { user: testAcct.user, pass: testAcct.pass }
     });
   }
 
@@ -55,19 +58,30 @@ async function sendResetEmail(toEmail, resetToken) {
     html: `<p>Click to reset your password: <a href="${resetLink}">${resetLink}</a></p>`
   };
 
-  try {
-    const info = await usedTransporter.sendMail(mailOptions);
-    const previewUrl = nodemailer.getTestMessageUrl(info) || null;
-    console.log('mailer -> messageId:', info.messageId, 'previewUrl:', previewUrl);
-    return { info, previewUrl };
-  } catch (err) {
-    // Log error and rethrow so caller can return fallback link
-    console.error('sendMail error:', err);
-    throw err;
-  } finally {
-    if (createdTestAccount && usedTransporter && usedTransporter.close) {
-      try { usedTransporter.close(); } catch (e) {}
+  const info = await transporter.sendMail(mailOptions);
+  const previewUrl = nodemailer.getTestMessageUrl(info) || null;
+  return { info, previewUrl };
+}
+
+async function sendResetEmail(toEmail, resetToken) {
+  const resetLink = `${FRONTEND_URL}/reset-password?token=${encodeURIComponent(resetToken)}&email=${encodeURIComponent(toEmail)}`;
+
+  
+  if (process.env.SENDGRID_API_KEY) {
+    try {
+      return await sendViaSendGrid(toEmail, resetLink);
+    } catch (err) {
+      console.error('SendGrid send error:', err);
+      
     }
+  }
+
+  try {
+    return await sendViaSmtp(toEmail, resetLink);
+  } catch (err) {
+    console.error('SMTP send error:', err);
+   
+    throw err;
   }
 }
 

@@ -1,17 +1,27 @@
+// src/components/ForgotPassword.jsx
 import React, { useState } from 'react';
 
+/**
+ * ForgotPassword component
+ * - Set REACT_APP_API_URL in your environment (e.g. .env or Netlify env)
+ *   Example: REACT_APP_API_URL=https://password-reset-2-qkox.onrender.com
+ */
 export default function ForgotPassword() {
   const [email, setEmail] = useState('');
   const [status, setStatus] = useState({ type: '', text: '' });
   const [loading, setLoading] = useState(false);
-  const [previewUrl, setPreviewUrl] = useState(null);
+  const [previewUrl, setPreviewUrl] = useState(null);   // Ethereal preview or fallback link
+  const [fallbackLink, setFallbackLink] = useState(null);
 
-  function validateEmail(e) { return /\S+@\S+\.\S+/.test(e); }
+  function validateEmail(e) {
+    return /\S+@\S+\.\S+/.test(e);
+  }
 
   async function submit(e) {
     e.preventDefault();
     setStatus({ type: '', text: '' });
     setPreviewUrl(null);
+    setFallbackLink(null);
 
     if (!validateEmail(email)) {
       setStatus({ type: 'error', text: 'Please enter a valid email.' });
@@ -20,7 +30,8 @@ export default function ForgotPassword() {
 
     setLoading(true);
 
-    const API = process.env.REACT_APP_API_URL || 'http://localhost:4000';
+    // Use env var REACT_APP_API_URL. Default to localhost:10000 for local dev.
+    const API = process.env.REACT_APP_API_URL || 'http://localhost:10000';
 
     try {
       const res = await fetch(`${API}/api/auth/request-reset`, {
@@ -33,15 +44,19 @@ export default function ForgotPassword() {
       setLoading(false);
 
       if (res.ok) {
-        
+        // Server may return previewUrl (Ethereal) or fallbackLink when SMTP times out
         if (data && data.previewUrl) {
           setPreviewUrl(data.previewUrl);
           setStatus({ type: 'success', text: 'Preview link returned — open it to view the reset email.' });
+        } else if (data && data.fallbackLink) {
+          setFallbackLink(data.fallbackLink);
+          setStatus({ type: 'success', text: 'Reset link generated (fallback). Open link below to continue.' });
         } else {
           setStatus({ type: 'success', text: 'If the email exists, a reset link has been sent.' });
         }
       } else {
-        setStatus({ type: 'error', text: data && data.error ? data.error : 'Something went wrong.' });
+        // non-200 from server
+        setStatus({ type: 'error', text: data && (data.error || data.message) ? (data.error || data.message) : 'Something went wrong.' });
       }
     } catch (err) {
       setLoading(false);
@@ -51,7 +66,7 @@ export default function ForgotPassword() {
   }
 
   return (
-    <div className="form-card mx-auto">
+    <div className="form-card mx-auto" style={{ maxWidth: 520 }}>
       <div className="card-header">
         <div className="icon"><i className="bi bi-lock-fill"></i></div>
         <div className="form-title">Forgot password</div>
@@ -61,13 +76,23 @@ export default function ForgotPassword() {
       <form onSubmit={submit} noValidate>
         <div className="form-group">
           <label className="form-label" htmlFor="email">Email</label>
-          <input id="email" type="email" className="form-control" placeholder="you@example.com"
-            value={email} onChange={e => setEmail(e.target.value)} required />
+          <input
+            id="email"
+            type="email"
+            className="form-control"
+            placeholder="you@example.com"
+            value={email}
+            onChange={e => setEmail(e.target.value)}
+            required
+          />
           <div className="form-text">We will never share your email.</div>
         </div>
 
         {status.text && (
-          <div className={`mt-3 alert ${status.type === 'success' ? 'alert-success' : 'alert-danger'}`} role="alert">
+          <div
+            className={`mt-3 alert ${status.type === 'success' ? 'alert-success' : 'alert-danger'}`}
+            role="alert"
+          >
             {status.text}
           </div>
         )}
@@ -79,7 +104,14 @@ export default function ForgotPassword() {
           </div>
         )}
 
-        <button className="btn btn-primary" type="submit" disabled={loading}>
+        {fallbackLink && (
+          <div className="mt-2">
+            <div style={{ marginBottom: 6, fontSize: 14, color: '#444' }}>Fallback reset link (use this if email not delivered):</div>
+            <a href={fallbackLink} target="_blank" rel="noopener noreferrer">{fallbackLink}</a>
+          </div>
+        )}
+
+        <button className="btn btn-primary mt-3" type="submit" disabled={loading}>
           {loading ? 'Sending…' : 'Send reset link'}
         </button>
 
