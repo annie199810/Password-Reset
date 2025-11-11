@@ -5,6 +5,7 @@ export default function ForgotPassword() {
   const [status, setStatus] = useState({ type: '', text: '' });
   const [loading, setLoading] = useState(false);
   const [previewUrl, setPreviewUrl] = useState(null);
+  const [fallbackLink, setFallbackLink] = useState(null);
 
   function validateEmail(e) { return /\S+@\S+\.\S+/.test(e); }
 
@@ -12,6 +13,7 @@ export default function ForgotPassword() {
     e.preventDefault();
     setStatus({ type: '', text: '' });
     setPreviewUrl(null);
+    setFallbackLink(null);
 
     if (!validateEmail(email)) {
       setStatus({ type: 'error', text: 'Please enter a valid email.' });
@@ -20,7 +22,7 @@ export default function ForgotPassword() {
 
     setLoading(true);
 
-    const API = process.env.REACT_APP_API_URL || 'http://localhost:4000';
+    const API = 'http://localhost:5000';
 
     try {
       const res = await fetch(`${API}/api/auth/request-reset`, {
@@ -33,10 +35,12 @@ export default function ForgotPassword() {
       setLoading(false);
 
       if (res.ok) {
-        
         if (data && data.previewUrl) {
           setPreviewUrl(data.previewUrl);
           setStatus({ type: 'success', text: 'Preview link returned — open it to view the reset email.' });
+        } else if (data && data.fallbackLink) {
+          setFallbackLink(data.fallbackLink);
+          setStatus({ type: 'success', text: 'Reset link generated (fallback). Open link below to continue.' });
         } else {
           setStatus({ type: 'success', text: 'If the email exists, a reset link has been sent.' });
         }
@@ -76,6 +80,13 @@ export default function ForgotPassword() {
           <div className="mt-2">
             <div style={{ marginBottom: 6, fontSize: 14, color: '#444' }}>Preview URL (demo):</div>
             <a href={previewUrl} target="_blank" rel="noopener noreferrer">{previewUrl}</a>
+          </div>
+        )}
+
+        {fallbackLink && (
+          <div className="mt-2">
+            <div style={{ marginBottom: 6, fontSize: 14, color: '#444' }}>Fallback link (logged):</div>
+            <a href={fallbackLink} target="_blank" rel="noopener noreferrer">{fallbackLink}</a>
           </div>
         )}
 
