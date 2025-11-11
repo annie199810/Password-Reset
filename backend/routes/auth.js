@@ -8,11 +8,13 @@ const bcrypt = require('bcrypt');
 
 const router = express.Router();
 
-const dbFile = path.join(__dirname, '..', 'users.sqlite');
+
+const dbFile = process.env.DB_FILE || path.join(__dirname, '..', 'users.sqlite');
 
 function openDb() {
   return new sqlite3.Database(dbFile);
 }
+
 
 
 router.post('/request-reset', async (req, res) => {
