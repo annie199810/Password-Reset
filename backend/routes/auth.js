@@ -3,124 +3,125 @@ const express = require('express');
 const crypto = require('crypto');
 const path = require('path');
 const sqlite3 = require('sqlite3').verbose();
+const bcrypt = require('bcrypt');
 const { sendResetEmail } = require('../utils/mailer');
 
 const router = express.Router();
 
-// DB path from env (set on Render) or default to local backend/users.sqlite
+// Resolve DB file (use env var on Render, otherwise local backend/users.sqlite)
 const DB_FILE = process.env.DB_FILE || path.join(__dirname, '..', 'users.sqlite');
 
-function openDb() {
-  return new sqlite3.Database(DB_FILE);
+function openDb(readonly = false) {
+  return new sqlite3.Database(DB_FILE, readonly ? sqlite3.OPEN_READONLY : sqlite3.OPEN_READWRITE | sqlite3.OPEN_CREATE);
 }
 
-// POST /api/auth/request-reset
+// Promise helpers for sqlite
+function dbGet(db, sql, params = []) {
+  return new Promise((resolve, reject) => {
+    db.get(sql, params, (err, row) => (err ? reject(err) : resolve(row)));
+  });
+}
+function dbRun(db, sql, params = []) {
+  return new Promise((resolve, reject) => {
+    db.run(sql, params, function (err) {
+      if (err) return reject(err);
+      resolve(this); // allows access to this.changes
+    });
+  });
+}
+
+// --- POST /request-reset
+// body: { email }
 router.post('/request-reset', async (req, res) => {
+  const { email } = req.body || {};
+  if (!email) return res.status(400).json({ error: 'email required' });
+
+  const token = crypto.randomBytes(20).toString('hex');
+  const expires = Date.now() + 1000 * 60 * 60; // 1 hour
+
+  const db = openDb();
   try {
-    const { email } = req.body;
-    if (!email) return res.status(400).json({ error: 'email required' });
-
-    const token = crypto.randomBytes(20).toString('hex');
-    const expires = Date.now() + 1000 * 60 * 60; // 1 hour
-
-    const db = openDb();
-    db.run(
+    // update token only if user exists
+    const update = await dbRun(
+      db,
       'UPDATE users SET reset_token = ?, reset_expires = ? WHERE email = ?',
-      [token, expires, email],
-      async function (err) {
-        if (err) {
-          console.error('DB update error:', err);
-          db.close();
-          return res.status(500).json({ error: 'internal' });
-        }
-
-        // If email not found, don't reveal that – respond 200 (silent success)
-        if (this.changes === 0) {
-          db.close();
-          return res.status(200).json({ ok: true, message: 'If the email exists, a reset link has been sent.' });
-        }
-
-        // Build fallback link (include token and email so frontend can read both)
-        const frontendUrl = (process.env.FRONTEND_URL || 'http://localhost:3000').replace(/\/$/, '');
-        const fallbackLink = `${frontendUrl}/reset-password?token=${encodeURIComponent(token)}&email=${encodeURIComponent(email)}`;
-
-        // Try to send email (mailer returns { previewUrl, info } or throws)
-        try {
-          const result = await sendResetEmail(email, token);
-          db.close();
-
-          return res.json({
-            ok: true,
-            message: 'reset link generated',
-            previewUrl: result.previewUrl || null,
-            fallbackLink
-          });
-        } catch (mailErr) {
-          // Mail failed but we still created token -> return fallback link
-          console.error('sendResetEmail error:', mailErr);
-          db.close();
-          return res.json({
-            ok: true,
-            message: 'reset token created (email delivery failed)',
-            previewUrl: null,
-            fallbackLink
-          });
-        }
-      }
+      [token, expires, email]
     );
+
+    // If no rows changed, user not found — return generic OK message (don't reveal existence)
+    if (!update.changes) {
+      // still respond OK (prevents email harvesting)
+      return res.json({ ok: true, message: 'If the email exists, a reset link has been sent.' });
+    }
+
+    // build fallback link (frontend URL should be set in env)
+    const frontend = process.env.FRONTEND_URL || 'http://localhost:3000';
+    const fallbackLink = `${frontend.replace(/\/$/, '')}/reset-password?token=${encodeURIComponent(token)}&email=${encodeURIComponent(email)}`;
+
+    // Try to send actual email; but don't fail the request if mail fails (return fallback link)
+    let mailResult = null;
+    try {
+      mailResult = await sendResetEmail(email, token);
+    } catch (mailErr) {
+      console.error('sendResetEmail error:', mailErr && mailErr.stack ? mailErr.stack : mailErr);
+    }
+
+    return res.json({
+      ok: true,
+      message: mailResult ? 'reset link generated' : 'reset token created (email delivery failed)',
+      previewUrl: mailResult && mailResult.previewUrl ? mailResult.previewUrl : null,
+      fallbackLink
+    });
   } catch (err) {
-    console.error('request-reset error ->', err);
+    console.error('request-reset DB error:', err && err.stack ? err.stack : err);
     return res.status(500).json({ error: 'internal' });
+  } finally {
+    db.close();
   }
 });
 
-
-// POST /api/auth/reset-password
+// --- POST /reset-password
+// body: { token, email, password }
 router.post('/reset-password', async (req, res) => {
+  const { token, email, password } = req.body || {};
+  if (!token || !email || !password) return res.status(400).json({ error: 'token, email and password required' });
+
+  const db = openDb();
   try {
-    const { token, password, email } = req.body;
-    if (!token || !password) return res.status(400).json({ error: 'token and password required' });
+    // Select row by token + email (safer)
+    const row = await dbGet(db, 'SELECT id, reset_expires FROM users WHERE reset_token = ? AND email = ?', [token, email]);
+    if (!row) return res.status(400).json({ error: 'Invalid token' });
 
-    const db = openDb();
-    db.get('SELECT id, reset_expires, email FROM users WHERE reset_token = ?', [token], async (err, row) => {
-      if (err) {
-        console.error('DB get error:', err);
-        db.close();
-        return res.status(500).json({ error: 'internal' });
-      }
-      if (!row) {
-        db.close();
-        return res.status(400).json({ error: 'Invalid token' });
-      }
+    if (!row.reset_expires || Number(row.reset_expires) < Date.now()) {
+      return res.status(400).json({ error: 'Token expired' });
+    }
 
-      if (!row.reset_expires || Number(row.reset_expires) < Date.now()) {
-        db.close();
-        return res.status(400).json({ error: 'Token expired' });
-      }
+    // Hash password and update
+    const hashed = await bcrypt.hash(password, 10);
+    await dbRun(db, 'UPDATE users SET password = ?, reset_token = NULL, reset_expires = NULL WHERE id = ?', [hashed, row.id]);
 
-      // optional: ensure email param matches stored email (extra safety)
-      if (email && email !== row.email) {
-        db.close();
-        return res.status(400).json({ error: 'Invalid token (email mismatch)' });
-      }
-
-      const bcrypt = require('bcrypt');
-      const hashed = await bcrypt.hash(password, 10);
-
-      db.run('UPDATE users SET password = ?, reset_token = NULL, reset_expires = NULL WHERE id = ?', [hashed, row.id], function (uerr) {
-        if (uerr) {
-          console.error('DB update password error:', uerr);
-          db.close();
-          return res.status(500).json({ error: 'internal' });
-        }
-        db.close();
-        return res.json({ ok: true, message: 'Password changed successfully' });
-      });
-    });
+    return res.json({ ok: true, message: 'Password changed successfully' });
   } catch (err) {
-    console.error('reset-password error ->', err);
+    console.error('reset-password error:', err && err.stack ? err.stack : err);
     return res.status(500).json({ error: 'internal' });
+  } finally {
+    db.close();
   }
+});
+
+// --- Dev helper: GET /debug-tokens  (returns tokens for inspection) ---
+// NOTE: remove or protect in production
+router.get('/debug-tokens', async (req, res) => {
+  const db = openDb(true);
+  db.all('SELECT email, reset_token, reset_expires FROM users', [], (err, rows) => {
+    if (err) {
+      console.error('debug-tokens error:', err);
+      db.close();
+      return res.status(500).json({ error: 'internal' });
+    }
+    db.close();
+    return res.json(rows || []);
+  });
 });
 
 module.exports = router;
