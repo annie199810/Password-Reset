@@ -1,13 +1,16 @@
-// backend/server.js - clean and simple
+
 
 require('dotenv').config();
 const fs = require('fs');
 const path = require('path');
 const express = require('express');
+const cors = require('cors');
+const sqlite3 = require('sqlite3').verbose();
+const bcrypt = require('bcrypt');
 
 const app = express();
 
-// --- Global error logging (helpful on Render) ---
+
 process.on('uncaughtException', (err) => {
   console.error('UNCAUGHT EXCEPTION:', err && err.stack ? err.stack : err);
   process.exit(1);
@@ -16,29 +19,34 @@ process.on('unhandledRejection', (reason, p) => {
   console.error('UNHANDLED REJECTION:', reason && reason.stack ? reason.stack : reason);
 });
 
-// --- Basic middleware ---
-const cors = require('cors');
-app.use(cors()); // for demo it's fine; change options for production
+
+app.use(cors()); 
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-// --- DB file: prefer process.env.DB_FILE, otherwise use ./data/users.sqlite ---
-const appRoot = path.join(__dirname, '..');
-const localDataDir = path.join(appRoot, 'data');
 
-if (!process.env.DB_FILE) {
-  if (!fs.existsSync(localDataDir)) {
-    try { fs.mkdirSync(localDataDir, { recursive: true }); } catch (e) { /* ignore */ }
-  }
-  process.env.DB_FILE = path.join(localDataDir, 'users.sqlite');
+const DB_FILE = process.env.DB_FILE || path.join(__dirname, 'users.sqlite');
+
+try {
+  
+  fs.mkdirSync(path.dirname(DB_FILE), { recursive: true });
+  fs.openSync(DB_FILE, 'a');
+} catch (e) {
+  console.error('Error ensuring DB file exists:', e && e.message ? e.message : e);
 }
-const DB_FILE = process.env.DB_FILE;
+
 console.log('Using DB file:', DB_FILE);
 
-// --- Mount auth routes (ensure routes/auth.js uses process.env.DB_FILE too) ---
+function openDb() {
+  return new sqlite3.Database(DB_FILE, (err) => {
+    if (err) console.error('Failed to open DB:', err);
+  });
+}
+
+
 app.use('/api/auth', require('./routes/auth'));
 
-// --- Serve frontend build if present ---
+
 const frontendBuild = path.join(__dirname, '..', 'frontend', 'build');
 if (fs.existsSync(frontendBuild)) {
   app.use(express.static(frontendBuild));
@@ -47,34 +55,30 @@ if (fs.existsSync(frontendBuild)) {
     res.sendFile(path.join(frontendBuild, 'index.html'));
   });
 } else {
-  console.log('No frontend build found at', frontendBuild);
+  console.log('Frontend build not found at', frontendBuild);
 }
 
-// --- Seed test user (runs at start, safe to call multiple times) ---
-const sqlite3 = require('sqlite3').verbose();
-const bcrypt = require('bcrypt');
 
 async function seedTestUser() {
   return new Promise((resolve) => {
-    const db = new sqlite3.Database(DB_FILE, (err) => {
-      if (err) {
-        console.error('Failed to open DB for seeding:', err);
-        return resolve();
-      }
-    });
+    const db = openDb();
+    if (!db) {
+      console.error('Database not opened for seeding.');
+      return resolve();
+    }
 
     db.run(
       `CREATE TABLE IF NOT EXISTS users (
-         id INTEGER PRIMARY KEY AUTOINCREMENT,
-         email TEXT UNIQUE,
-         password TEXT,
-         reset_token TEXT,
-         reset_expires INTEGER
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        email TEXT UNIQUE,
+        password TEXT,
+        reset_token TEXT,
+        reset_expires INTEGER
       )`,
       (createErr) => {
         if (createErr) {
           console.error('Create table error:', createErr);
-          db.close();
+          try { db.close(); } catch (_) {}
           return resolve();
         }
 
@@ -91,15 +95,15 @@ async function seedTestUser() {
                 if (insertErr) {
                   console.error('Seed insert error:', insertErr);
                 } else {
-                  console.log(`Seeded ${seedEmail} — inserted=${this.changes}`);
+                  console.log(`✅ Seeded ${seedEmail} — inserted=${this.changes}`);
                 }
-                db.close();
+                try { db.close(); } catch (_) {}
                 resolve();
               }
             );
           } catch (err) {
             console.error('Seed hashing error:', err);
-            db.close();
+            try { db.close(); } catch (_) {}
             resolve();
           }
         })();
@@ -108,7 +112,7 @@ async function seedTestUser() {
   });
 }
 
-// --- Start server ---
+
 const PORT = Number(process.env.PORT) || 10000;
 
 seedTestUser()
