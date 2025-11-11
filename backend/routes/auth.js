@@ -1,4 +1,4 @@
-// backend/routes/auth.js
+
 const express = require('express');
 const crypto = require('crypto');
 const path = require('path');
@@ -8,14 +8,14 @@ const { sendResetEmail } = require('../utils/mailer');
 
 const router = express.Router();
 
-// Resolve DB file (use env var on Render, otherwise local backend/users.sqlite)
+
 const DB_FILE = process.env.DB_FILE || path.join(__dirname, '..', 'users.sqlite');
 
 function openDb(readonly = false) {
   return new sqlite3.Database(DB_FILE, readonly ? sqlite3.OPEN_READONLY : sqlite3.OPEN_READWRITE | sqlite3.OPEN_CREATE);
 }
 
-// Promise helpers for sqlite
+
 function dbGet(db, sql, params = []) {
   return new Promise((resolve, reject) => {
     db.get(sql, params, (err, row) => (err ? reject(err) : resolve(row)));
@@ -25,40 +25,38 @@ function dbRun(db, sql, params = []) {
   return new Promise((resolve, reject) => {
     db.run(sql, params, function (err) {
       if (err) return reject(err);
-      resolve(this); // allows access to this.changes
+      resolve(this); 
     });
   });
 }
 
-// --- POST /request-reset
-// body: { email }
+
 router.post('/request-reset', async (req, res) => {
   const { email } = req.body || {};
   if (!email) return res.status(400).json({ error: 'email required' });
 
   const token = crypto.randomBytes(20).toString('hex');
-  const expires = Date.now() + 1000 * 60 * 60; // 1 hour
+  const expires = Date.now() + 1000 * 60 * 60; 
 
   const db = openDb();
   try {
-    // update token only if user exists
+    
     const update = await dbRun(
       db,
       'UPDATE users SET reset_token = ?, reset_expires = ? WHERE email = ?',
       [token, expires, email]
     );
 
-    // If no rows changed, user not found — return generic OK message (don't reveal existence)
+  
     if (!update.changes) {
-      // still respond OK (prevents email harvesting)
+  
       return res.json({ ok: true, message: 'If the email exists, a reset link has been sent.' });
     }
 
-    // build fallback link (frontend URL should be set in env)
+    
     const frontend = process.env.FRONTEND_URL || 'http://localhost:3000';
     const fallbackLink = `${frontend.replace(/\/$/, '')}/reset-password?token=${encodeURIComponent(token)}&email=${encodeURIComponent(email)}`;
 
-    // Try to send actual email; but don't fail the request if mail fails (return fallback link)
     let mailResult = null;
     try {
       mailResult = await sendResetEmail(email, token);
@@ -80,15 +78,14 @@ router.post('/request-reset', async (req, res) => {
   }
 });
 
-// --- POST /reset-password
-// body: { token, email, password }
+
 router.post('/reset-password', async (req, res) => {
   const { token, email, password } = req.body || {};
   if (!token || !email || !password) return res.status(400).json({ error: 'token, email and password required' });
 
   const db = openDb();
   try {
-    // Select row by token + email (safer)
+    
     const row = await dbGet(db, 'SELECT id, reset_expires FROM users WHERE reset_token = ? AND email = ?', [token, email]);
     if (!row) return res.status(400).json({ error: 'Invalid token' });
 
@@ -96,7 +93,7 @@ router.post('/reset-password', async (req, res) => {
       return res.status(400).json({ error: 'Token expired' });
     }
 
-    // Hash password and update
+    
     const hashed = await bcrypt.hash(password, 10);
     await dbRun(db, 'UPDATE users SET password = ?, reset_token = NULL, reset_expires = NULL WHERE id = ?', [hashed, row.id]);
 
@@ -109,8 +106,7 @@ router.post('/reset-password', async (req, res) => {
   }
 });
 
-// --- Dev helper: GET /debug-tokens  (returns tokens for inspection) ---
-// NOTE: remove or protect in production
+
 router.get('/debug-tokens', async (req, res) => {
   const db = openDb(true);
   db.all('SELECT email, reset_token, reset_expires FROM users', [], (err, rows) => {
