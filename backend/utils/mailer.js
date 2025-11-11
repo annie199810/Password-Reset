@@ -1,44 +1,56 @@
 
 const nodemailer = require('nodemailer');
 
+function createTransporter() {
+  if (!process.env.EMAIL_HOST || !process.env.EMAIL_USER || !process.env.EMAIL_PASS) {
+    return null;
+  }
+  try {
+    return nodemailer.createTransport({
+      host: process.env.EMAIL_HOST,
+      port: Number(process.env.EMAIL_PORT || 587),
+      secure: false,
+      auth: {
+        user: process.env.EMAIL_USER,
+        pass: process.env.EMAIL_PASS
+      }
+    });
+  } catch (e) {
+    console.error('createTransporter error', e);
+    return null;
+  }
+}
 
-const transporter = nodemailer.createTransport({
-  host: process.env.EMAIL_HOST || 'smtp.ethereal.email',
-  port: Number(process.env.EMAIL_PORT) || 587,
-  secure: false,
-  auth: {
-    user: process.env.EMAIL_USER,
-    pass: process.env.EMAIL_PASS
-  },
-  tls: { rejectUnauthorized: false },
-  connectionTimeout: 15000
-});
+async function sendResetEmail(toEmail, resetToken) {
+ 
+  const frontend = (process.env.FRONTEND_URL || 'http://localhost:3000').replace(/\/$/, '');
+  const resetLink = `${frontend}/reset-password?token=${encodeURIComponent(resetToken)}`;
 
-async function sendResetEmail(to, token) {
-  const link = `${process.env.FRONTEND_URL}/reset-password?token=${encodeURIComponent(token)}`;
+  const transporter = createTransporter();
 
+ 
+  if (!transporter) {
+    const fallback = resetLink;
+    console.warn('No SMTP transporter available — returning fallback link only');
+    return { fallbackLink: fallback, previewUrl: null };
+  }
 
   try {
-  
     const info = await transporter.sendMail({
-      from: process.env.FROM_EMAIL || '"Secure App" <no-reply@secureapp.com>',
-      to,
-      subject: 'Password Reset Request',
-      text: `Open this link to reset your password: ${link}`,
-      html: `<p>Open this link to reset your password: <a href="${link}">${link}</a></p>`
+      from: process.env.FROM_EMAIL || '"Your App" <no-reply@yourapp.com>',
+      to: toEmail,
+      subject: 'Password reset',
+      text: `Reset link: ${resetLink}`,
+      html: `<p>Click to reset: <a href="${resetLink}">${resetLink}</a></p>`
     });
 
-    
     const previewUrl = nodemailer.getTestMessageUrl(info) || null;
-    console.log('✅ Email sent (info.messageId):', info && info.messageId);
-    if (previewUrl) console.log('📬 Preview URL:', previewUrl);
-
-    return { info, previewUrl, fallbackLink: null };
+    console.log('mailer -> messageId:', info.messageId, 'previewUrl:', previewUrl);
+    return { fallbackLink: resetLink, previewUrl };
   } catch (err) {
-   
-    console.warn('mailer: SMTP send failed, using fallback link. Error:', (err && err.code) || err);
-    console.log('FALLBACK RESET LINK (no SMTP):', link);
-    return { info: null, previewUrl: null, fallbackLink: link };
+    console.error('sendMail error:', err);
+    
+    return { fallbackLink: resetLink, previewUrl: null };
   }
 }
 

@@ -1,12 +1,9 @@
 
-
 require('dotenv').config();
 const fs = require('fs');
 const path = require('path');
 const express = require('express');
 const cors = require('cors');
-const sqlite3 = require('sqlite3').verbose();
-const bcrypt = require('bcrypt');
 
 const app = express();
 
@@ -15,12 +12,12 @@ process.on('uncaughtException', (err) => {
   console.error('UNCAUGHT EXCEPTION:', err && err.stack ? err.stack : err);
   process.exit(1);
 });
-process.on('unhandledRejection', (reason, p) => {
+process.on('unhandledRejection', (reason) => {
   console.error('UNHANDLED REJECTION:', reason && reason.stack ? reason.stack : reason);
 });
 
 
-app.use(cors()); 
+app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
@@ -28,20 +25,15 @@ app.use(express.urlencoded({ extended: true }));
 const DB_FILE = process.env.DB_FILE || path.join(__dirname, 'users.sqlite');
 
 try {
-  
   fs.mkdirSync(path.dirname(DB_FILE), { recursive: true });
   fs.openSync(DB_FILE, 'a');
 } catch (e) {
-  console.error('Error ensuring DB file exists:', e && e.message ? e.message : e);
+  console.warn('Could not ensure DB file exists:', e && e.message ? e.message : e);
 }
-
 console.log('Using DB file:', DB_FILE);
 
-function openDb() {
-  return new sqlite3.Database(DB_FILE, (err) => {
-    if (err) console.error('Failed to open DB:', err);
-  });
-}
+
+process.env.DB_FILE = DB_FILE;
 
 
 app.use('/api/auth', require('./routes/auth'));
@@ -55,17 +47,21 @@ if (fs.existsSync(frontendBuild)) {
     res.sendFile(path.join(frontendBuild, 'index.html'));
   });
 } else {
-  console.log('Frontend build not found at', frontendBuild);
+  console.log('No frontend build found at', frontendBuild);
 }
 
 
+const sqlite3 = require('sqlite3').verbose();
+const bcrypt = require('bcrypt');
+
 async function seedTestUser() {
   return new Promise((resolve) => {
-    const db = openDb();
-    if (!db) {
-      console.error('Database not opened for seeding.');
-      return resolve();
-    }
+    const db = new sqlite3.Database(DB_FILE, (err) => {
+      if (err) {
+        console.error('Failed to open DB for seeding:', err);
+        return resolve();
+      }
+    });
 
     db.run(
       `CREATE TABLE IF NOT EXISTS users (
@@ -77,8 +73,8 @@ async function seedTestUser() {
       )`,
       (createErr) => {
         if (createErr) {
-          console.error('Create table error:', createErr);
-          try { db.close(); } catch (_) {}
+          console.error('Seed: create table error:', createErr);
+          try { db.close(); } catch(_) {}
           return resolve();
         }
 
@@ -93,17 +89,17 @@ async function seedTestUser() {
               [seedEmail, hashed],
               function (insertErr) {
                 if (insertErr) {
-                  console.error('Seed insert error:', insertErr);
+                  console.error('Seed: insert error:', insertErr);
                 } else {
                   console.log(`✅ Seeded ${seedEmail} — inserted=${this.changes}`);
                 }
-                try { db.close(); } catch (_) {}
+                try { db.close(); } catch(_) {}
                 resolve();
               }
             );
-          } catch (err) {
-            console.error('Seed hashing error:', err);
-            try { db.close(); } catch (_) {}
+          } catch (hashErr) {
+            console.error('Seed: hashing error:', hashErr);
+            try { db.close(); } catch(_) {}
             resolve();
           }
         })();
@@ -112,19 +108,18 @@ async function seedTestUser() {
   });
 }
 
-
 const PORT = Number(process.env.PORT) || 10000;
 
 seedTestUser()
   .then(() => {
     app.listen(PORT, () => {
-      console.log(`Server listening on ${PORT} (NODE_ENV=${process.env.NODE_ENV || 'development'})`);
+      console.log(`Server running on ${PORT} (NODE_ENV=${process.env.NODE_ENV || 'development'})`);
     });
   })
   .catch((err) => {
     console.error('Seed failed, starting server anyway:', err);
     app.listen(PORT, () => {
-      console.log(`Server listening on ${PORT} (NODE_ENV=${process.env.NODE_ENV || 'development'})`);
+      console.log(`Server running on ${PORT} (NODE_ENV=${process.env.NODE_ENV || 'development'})`);
     });
   });
 
