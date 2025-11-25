@@ -1,16 +1,10 @@
-// src/components/ForgotPassword.jsx
 import React, { useState } from 'react';
 
-/**
- * ForgotPassword component
- * - Set REACT_APP_API_URL in your environment (e.g. .env or Netlify env)
- *   Example: REACT_APP_API_URL=https://password-reset-2-qkox.onrender.com
- */
 export default function ForgotPassword() {
   const [email, setEmail] = useState('');
   const [status, setStatus] = useState({ type: '', text: '' });
   const [loading, setLoading] = useState(false);
-  const [previewUrl, setPreviewUrl] = useState(null);   // Ethereal preview or fallback link
+  const [previewUrl, setPreviewUrl] = useState(null);
   const [fallbackLink, setFallbackLink] = useState(null);
 
   function validateEmail(e) {
@@ -30,7 +24,6 @@ export default function ForgotPassword() {
 
     setLoading(true);
 
-    // Use env var REACT_APP_API_URL. Default to localhost:10000 for local dev.
     const API = process.env.REACT_APP_API_URL || 'http://localhost:10000';
 
     try {
@@ -44,7 +37,6 @@ export default function ForgotPassword() {
       setLoading(false);
 
       if (res.ok) {
-        // Server may return previewUrl (Ethereal) or fallbackLink when SMTP times out
         if (data && data.previewUrl) {
           setPreviewUrl(data.previewUrl);
           setStatus({ type: 'success', text: 'Preview link returned — open it to view the reset email.' });
@@ -55,7 +47,6 @@ export default function ForgotPassword() {
           setStatus({ type: 'success', text: 'If the email exists, a reset link has been sent.' });
         }
       } else {
-        // non-200 from server
         setStatus({ type: 'error', text: data && (data.error || data.message) ? (data.error || data.message) : 'Something went wrong.' });
       }
     } catch (err) {

@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useRef } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 
@@ -12,7 +11,6 @@ export default function ResetPassword() {
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
 
-  
   const redirectTimeoutRef = useRef(null);
 
   useEffect(() => {
@@ -34,7 +32,7 @@ export default function ResetPassword() {
 
     try {
       setLoading(true);
-      const apiBase = process.env.REACT_APP_API_URL || 'http://localhost:4000';
+      const apiBase = process.env.REACT_APP_API_URL || 'http://localhost:10000';
       const res = await fetch(`${apiBase}/api/auth/reset-password`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -45,14 +43,12 @@ export default function ResetPassword() {
       setLoading(false);
 
       if (res.ok) {
-      
         setStatus({ type: 'success', text: '✅ Password changed successfully! Redirecting to login…' });
 
         redirectTimeoutRef.current = setTimeout(() => {
-          navigate('/');
-        }, 3000); 
+          navigate('/login');
+        }, 2000);
       } else {
-       
         setStatus({ type: 'error', text: data.error || 'Invalid or expired link.' });
       }
     } catch (err) {
@@ -73,7 +69,6 @@ export default function ResetPassword() {
     );
   }
 
- 
   if (status.type === 'success') {
     return (
       <div className="form-card mx-auto text-center">
