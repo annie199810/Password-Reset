@@ -1,4 +1,3 @@
-
 const express = require('express');
 const crypto = require('crypto');
 const path = require('path');
@@ -10,6 +9,12 @@ const { sendResetEmail } = require('../utils/mailer');
 const router = express.Router();
 
 const DB_FILE = process.env.DB_FILE || path.join(__dirname, '..', 'users.sqlite');
+const BCRYPT_ROUNDS = Number(process.env.BCRYPT_ROUNDS) || 10;
+const JWT_SECRET = process.env.JWT_SECRET || 'dev_secret';
+
+if (process.env.NODE_ENV === 'production' && (!process.env.JWT_SECRET || process.env.JWT_SECRET === 'dev_secret')) {
+  console.warn('WARNING: Running in production without a secure JWT_SECRET. Set JWT_SECRET in environment!');
+}
 
 function openDb(readonly = false) {
   return new sqlite3.Database(
@@ -32,16 +37,42 @@ function dbRun(db, sql, params = []) {
   });
 }
 
-const JWT_SECRET = process.env.JWT_SECRET || 'dev_secret';
+function normalizeEmail(raw) {
+  return String(raw || '').trim().toLowerCase();
+}
+
+
+router.get('/me', async (req, res) => {
+  const auth = req.headers.authorization || '';
+  const token = auth.startsWith('Bearer ') ? auth.slice(7) : null;
+  if (!token) return res.status(401).json({ error: 'Missing token' });
+
+  try {
+    const payload = jwt.verify(token, JWT_SECRET);
+    const db = openDb(true);
+    try {
+      const row = await dbGet(db, 'SELECT id, email FROM users WHERE id = ?', [payload.id]);
+      if (!row) return res.status(404).json({ error: 'User not found' });
+      return res.json({ ok: true, user: { id: row.id, email: row.email } });
+    } finally {
+      db.close();
+    }
+  } catch (err) {
+    console.error('me error', err && err.stack ? err.stack : err);
+    return res.status(401).json({ error: 'Invalid token' });
+  }
+});
 
 
 router.post('/register', async (req, res) => {
   const { email, password } = req.body || {};
-  if (!email || !password) return res.status(400).json({ error: 'email and password required' });
+  const emailNorm = normalizeEmail(email);
+
+  if (!emailNorm || !password) return res.status(400).json({ error: 'email and password required' });
 
   const db = openDb();
   try {
-    
+
     await dbRun(db, `CREATE TABLE IF NOT EXISTS users (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       email TEXT UNIQUE,
@@ -50,13 +81,13 @@ router.post('/register', async (req, res) => {
       reset_expires INTEGER
     )`, []);
 
-    const existing = await dbGet(db, 'SELECT id FROM users WHERE email = ?', [email]);
+    const existing = await dbGet(db, 'SELECT id FROM users WHERE email = ?', [emailNorm]);
     if (existing) {
       return res.status(400).json({ error: 'Email already registered' });
     }
 
-    const hashed = await bcrypt.hash(password, 10);
-    await dbRun(db, 'INSERT INTO users (email, password) VALUES (?, ?)', [email, hashed]);
+    const hashed = await bcrypt.hash(password, BCRYPT_ROUNDS);
+    await dbRun(db, 'INSERT INTO users (email, password) VALUES (?, ?)', [emailNorm, hashed]);
 
     return res.json({ ok: true, message: 'Registered' });
   } catch (err) {
@@ -70,17 +101,19 @@ router.post('/register', async (req, res) => {
 
 router.post('/login', async (req, res) => {
   const { email, password } = req.body || {};
-  if (!email || !password) return res.status(400).json({ error: 'email and password required' });
+  const emailNorm = normalizeEmail(email);
+
+  if (!emailNorm || !password) return res.status(400).json({ error: 'email and password required' });
 
   const db = openDb(true);
   try {
-    const row = await dbGet(db, 'SELECT id, password FROM users WHERE email = ?', [email]);
+    const row = await dbGet(db, 'SELECT id, password FROM users WHERE email = ?', [emailNorm]);
     if (!row) return res.status(400).json({ error: 'Invalid credentials' });
 
     const ok = await bcrypt.compare(password, row.password);
     if (!ok) return res.status(400).json({ error: 'Invalid credentials' });
 
-    const token = jwt.sign({ id: row.id, email }, JWT_SECRET, { expiresIn: '7d' });
+    const token = jwt.sign({ id: row.id, email: emailNorm }, JWT_SECRET, { expiresIn: '7d' });
     return res.json({ ok: true, token });
   } catch (err) {
     console.error('login error', err && err.stack ? err.stack : err);
@@ -91,10 +124,11 @@ router.post('/login', async (req, res) => {
 });
 
 
-
 router.post('/request-reset', async (req, res) => {
   const { email } = req.body || {};
-  if (!email) return res.status(400).json({ error: 'email required' });
+  const emailNorm = normalizeEmail(email);
+
+  if (!emailNorm) return res.status(400).json({ error: 'email required' });
 
   const token = crypto.randomBytes(20).toString('hex');
   const expires = Date.now() + 1000 * 60 * 60; 
@@ -104,21 +138,20 @@ router.post('/request-reset', async (req, res) => {
     const update = await dbRun(
       db,
       'UPDATE users SET reset_token = ?, reset_expires = ? WHERE email = ?',
-      [token, expires, email]
+      [token, expires, emailNorm]
     );
 
-    
+   
     if (!update.changes) {
       return res.json({ ok: true, message: 'If the email exists, a reset link has been sent.' });
     }
 
-   
     const frontend = process.env.FRONTEND_URL || 'http://localhost:3000';
-    const fallbackLink = `${frontend.replace(/\/$/, '')}/reset-password?token=${encodeURIComponent(token)}&email=${encodeURIComponent(email)}`;
+    const fallbackLink = `${frontend.replace(/\/$/, '')}/reset-password?token=${encodeURIComponent(token)}&email=${encodeURIComponent(emailNorm)}`;
 
     let mailResult = null;
     try {
-      mailResult = await sendResetEmail(email, token);
+      mailResult = await sendResetEmail(emailNorm, token);
     } catch (mailErr) {
       console.error('sendResetEmail error:', mailErr && mailErr.stack ? mailErr.stack : mailErr);
     }
@@ -140,18 +173,20 @@ router.post('/request-reset', async (req, res) => {
 
 router.post('/reset-password', async (req, res) => {
   const { token, email, password } = req.body || {};
-  if (!token || !email || !password) return res.status(400).json({ error: 'token, email and password required' });
+  const emailNorm = normalizeEmail(email);
+
+  if (!token || !emailNorm || !password) return res.status(400).json({ error: 'token, email and password required' });
 
   const db = openDb();
   try {
-    const row = await dbGet(db, 'SELECT id, reset_expires FROM users WHERE reset_token = ? AND email = ?', [token, email]);
+    const row = await dbGet(db, 'SELECT id, reset_expires FROM users WHERE reset_token = ? AND email = ?', [token, emailNorm]);
     if (!row) return res.status(400).json({ error: 'Invalid token' });
 
     if (!row.reset_expires || Number(row.reset_expires) < Date.now()) {
       return res.status(400).json({ error: 'Token expired' });
     }
 
-    const hashed = await bcrypt.hash(password, 10);
+    const hashed = await bcrypt.hash(password, BCRYPT_ROUNDS);
     await dbRun(db, 'UPDATE users SET password = ?, reset_token = NULL, reset_expires = NULL WHERE id = ?', [hashed, row.id]);
 
     return res.json({ ok: true, message: 'Password changed successfully' });
