@@ -5,7 +5,7 @@ export default function ForgotPassword() {
   const [status, setStatus] = useState({ type: '', text: '' });
   const [loading, setLoading] = useState(false);
   const [previewUrl, setPreviewUrl] = useState(null);
-  const [fallbackLink, setFallbackLink] = useState(null);
+  const [resetLink, setResetLink] = useState(null);
 
   function validateEmail(e) {
     return /\S+@\S+\.\S+/.test(e);
@@ -13,9 +13,10 @@ export default function ForgotPassword() {
 
   async function submit(e) {
     e.preventDefault();
+
     setStatus({ type: '', text: '' });
     setPreviewUrl(null);
-    setFallbackLink(null);
+    setResetLink(null);
 
     if (!validateEmail(email)) {
       setStatus({ type: 'error', text: 'Please enter a valid email.' });
@@ -37,22 +38,47 @@ export default function ForgotPassword() {
       setLoading(false);
 
       if (res.ok) {
+      
         if (data && data.previewUrl) {
           setPreviewUrl(data.previewUrl);
-          setStatus({ type: 'success', text: 'Preview link returned — open it to view the reset email.' });
-        } else if (data && data.fallbackLink) {
-          setFallbackLink(data.fallbackLink);
-          setStatus({ type: 'success', text: 'Reset link generated (fallback). Open link below to continue.' });
+        }
+
+        
+        const linkFromApi =
+          (data && data.resetUrl) ||
+          (data && data.fallbackLink) ||
+          null;
+
+        if (linkFromApi) {
+          setResetLink(linkFromApi);
+          setStatus({
+            type: 'success',
+            text:
+              'Reset link generated. Use the link below to reset your password.'
+          });
         } else {
-          setStatus({ type: 'success', text: 'If the email exists, a reset link has been sent.' });
+          setStatus({
+            type: 'success',
+            text:
+              'If the email exists, a reset link has been sent.'
+          });
         }
       } else {
-        setStatus({ type: 'error', text: data && (data.error || data.message) ? (data.error || data.message) : 'Something went wrong.' });
+        setStatus({
+          type: 'error',
+          text:
+            data && (data.error || data.message)
+              ? data.error || data.message
+              : 'Something went wrong.'
+        });
       }
     } catch (err) {
       setLoading(false);
       console.error('Request error:', err);
-      setStatus({ type: 'error', text: 'Cannot connect to server. Please make sure backend is running.' });
+      setStatus({
+        type: 'error',
+        text: 'Cannot connect to server. Please make sure backend is running.'
+      });
     }
   }
 
@@ -61,7 +87,9 @@ export default function ForgotPassword() {
       <div className="card-header">
         <div className="icon"><i className="bi bi-lock-fill"></i></div>
         <div className="form-title">Forgot password</div>
-        <div className="form-sub">Enter your account email and we'll send a secure reset link.</div>
+        <div className="form-sub">
+          Enter your account email and we'll send a secure reset link.
+        </div>
       </div>
 
       <form onSubmit={submit} noValidate>
@@ -81,7 +109,9 @@ export default function ForgotPassword() {
 
         {status.text && (
           <div
-            className={`mt-3 alert ${status.type === 'success' ? 'alert-success' : 'alert-danger'}`}
+            className={`mt-3 alert ${
+              status.type === 'success' ? 'alert-success' : 'alert-danger'
+            }`}
             role="alert"
           >
             {status.text}
@@ -90,24 +120,49 @@ export default function ForgotPassword() {
 
         {previewUrl && (
           <div className="mt-2">
-            <div style={{ marginBottom: 6, fontSize: 14, color: '#444' }}>Preview URL (demo):</div>
-            <a href={previewUrl} target="_blank" rel="noopener noreferrer">{previewUrl}</a>
+            <div
+              style={{ marginBottom: 6, fontSize: 14, color: '#444' }}
+            >
+              Preview URL (demo):
+            </div>
+            <a
+              href={previewUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              {previewUrl}
+            </a>
           </div>
         )}
 
-        {fallbackLink && (
+        {resetLink && (
           <div className="mt-2">
-            <div style={{ marginBottom: 6, fontSize: 14, color: '#444' }}>Fallback reset link (use this if email not delivered):</div>
-            <a href={fallbackLink} target="_blank" rel="noopener noreferrer">{fallbackLink}</a>
+            <div
+              style={{ marginBottom: 6, fontSize: 14, color: '#444' }}
+            >
+              Reset link (demo – click to continue):
+            </div>
+            <a
+              href={resetLink}
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              {resetLink}
+            </a>
           </div>
         )}
 
-        <button className="btn btn-primary mt-3" type="submit" disabled={loading}>
+        <button
+          className="btn btn-primary mt-3"
+          type="submit"
+          disabled={loading}
+        >
           {loading ? 'Sending…' : 'Send reset link'}
         </button>
 
         <div className="note" style={{ marginTop: 12 }}>
-          Use seeded test account <strong>test@example.com</strong> for demo (Ethereal preview).
+          Use seeded test account <strong>test@example.com</strong> for demo
+          (Ethereal preview).
         </div>
       </form>
     </div>
