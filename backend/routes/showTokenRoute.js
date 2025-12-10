@@ -4,7 +4,8 @@ const path = require("path");
 
 const router = express.Router();
 
-const DB = process.env.DB_FILE || path.join(__dirname, "..", "users.sqlite");
+const DB = process.env.DB_FILE || '/tmp/users.sqlite';
+
 
 router.get("/show-token", (req, res) => {
   const db = new sqlite3.Database(DB, (err) => {

@@ -32,7 +32,8 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
 
-const DB_FILE = process.env.DB_FILE || path.join(__dirname, "users.sqlite");
+const DB_FILE = process.env.DB_FILE || '/tmp/users.sqlite';
+
 
 try {
   fs.mkdirSync(path.dirname(DB_FILE), { recursive: true });
