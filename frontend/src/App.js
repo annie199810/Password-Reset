@@ -26,19 +26,28 @@ export default function App() {
 
           <main className="split-main">
             <Routes>
-              
-              <Route path="/" element={
-                <ProtectedRoute>
-                  <Dashboard />
-                </ProtectedRoute>
-              } />
-              <Route path="/login" element={<Login />} />
-              <Route path="/register" element={<Register />} />
-              <Route path="/reset-password" element={<ResetPassword />} />
-             <Route path="/" element={<Dashboard />} />
+             
+              <Route
+                path="/"
+                element={
+                  <ProtectedRoute>
+                    <Dashboard />
+                  </ProtectedRoute>
+                }
+              />
 
             
-              <Route path="/forgot" element={<ForgotPassword />} />
+              <Route path="/login" element={<Login />} />
+              <Route path="/register" element={<Register />} />
+
+            
+              <Route path="/forgot-password" element={<ForgotPassword />} />
+           
+              <Route path="/reset-password" element={<ResetPassword />} />
+             
+
+              
+              <Route path="*" element={<div style={{padding:24}}>Page not found</div>} />
             </Routes>
           </main>
 
