@@ -47,7 +47,6 @@ export default function Login() {
         setStatus({ type: "success", text: "Login successful — redirecting…" });
         setTimeout(() => navigate("/"), 700);
       } else {
-       
         setStatus({ type: "error", text: data.error || data.message || "Invalid credentials." });
       }
     } catch (err) {
@@ -66,7 +65,6 @@ export default function Login() {
       </div>
 
       <form onSubmit={submit} noValidate>
-      
         <div className="form-group">
           <label className="form-label" htmlFor="email">Email</label>
           <input
@@ -81,7 +79,6 @@ export default function Login() {
           />
         </div>
 
-     
         <div className="form-group" style={{ marginTop: 12 }}>
           <label className="form-label" htmlFor="password">Password</label>
           <input
@@ -96,7 +93,6 @@ export default function Login() {
           />
         </div>
 
-      
         {status.text && (
           <div
             className={`mt-3 alert ${
@@ -112,7 +108,6 @@ export default function Login() {
           </div>
         )}
 
-        
         <button
           type="submit"
           className="btn btn-primary mt-3"
@@ -122,7 +117,6 @@ export default function Login() {
           {loading ? "Signing in…" : "Sign in"}
         </button>
 
-      
         <div style={{ marginTop: 12, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
           <div>
             <Link to="/forgot">Forgot your password? Reset it.</Link>
@@ -132,30 +126,16 @@ export default function Login() {
           </div>
         </div>
 
- 
-        <div
-          className="demo-box"
-          style={{
-            marginTop: 16,
-            background: "#f4efff",
-            borderRadius: 8,
-            padding: 12,
-            border: "1px solid rgba(0,0,0,0.06)"
-          }}
-        >
-          <div style={{ fontWeight: 700, marginBottom: 6 }}>Demo Login:</div>
-          <div>Email: <strong>{DEMO_EMAIL}</strong></div>
-          <div>Password: <strong>{DEMO_PASSWORD}</strong></div>
+       
+        <div style={{ marginTop: 14, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
+          <div style={{ fontSize: 13, color: "#666" }}>
+            <strong style={{ fontWeight: 600 }}>Demo:</strong>{" "}
+            <span style={{ fontWeight: 500, color: "#333" }}>{DEMO_EMAIL} / {DEMO_PASSWORD}</span>
+          </div>
 
-          <button
-            type="button"
-            onClick={fillDemo}
-            className="btn btn-outline-secondary"
-            style={{ marginTop: 10 }}
-          >
-            Use Demo Credentials
-          </button>
+         
         </div>
+        
       </form>
     </div>
   );

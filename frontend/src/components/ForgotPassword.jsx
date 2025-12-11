@@ -36,7 +36,7 @@ export default function ForgotPassword() {
       setLoading(false);
 
       if (res.ok) {
-        // If backend provided a preview URL (Ethereal) or fallback link
+        
         if (data && data.previewUrl) {
           setPreviewUrl(data.previewUrl);
           setStatus({ type: 'success', text: 'Preview available — open link to view the reset email.' });
@@ -47,7 +47,7 @@ export default function ForgotPassword() {
           setStatus({ type: 'success', text: 'If the email exists, a reset link has been sent.' });
         }
       } else {
-        // show backend message if provided
+        
         const msg = data && (data.error || data.message) ? (data.error || data.message) : 'Request failed.';
         setStatus({ type: 'error', text: msg });
       }
