@@ -1,86 +1,103 @@
-import React, { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import React, { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 
-const API_BASE = import.meta.env.VITE_API_BASE_URL || "";
-
-function Login() {
-  const navigate = useNavigate();
-
+export default function Login() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [error, setError] = useState("");
+  const [status, setStatus] = useState({ type: "", text: "" });
+  const [loading, setLoading] = useState(false);
 
-  const handleSubmit = async (e) => {
+  const navigate = useNavigate();
+
+  const API = process.env.REACT_APP_API_URL;  
+
+  async function submit(e) {
     e.preventDefault();
-    setError("");
+    setStatus({ type: "", text: "" });
+
+    if (!email || !password) {
+      return setStatus({ type: "error", text: "Email and password are required." });
+    }
+
+    setLoading(true);
 
     try {
-      const res = await fetch(`${API_BASE}/auth/login`, {
+      const res = await fetch(`${API}/api/auth/login`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, password }),
+        body: JSON.stringify({ email, password })
       });
 
       const data = await res.json();
+      setLoading(false);
 
-      if (!res.ok) {
-        setError(data.message || "Invalid credentials");
-        return;
+      if (res.ok) {
+        if (data.token) localStorage.setItem("token", data.token);
+        setStatus({ type: "success", text: "Login successful. Redirecting…" });
+        setTimeout(() => navigate('/'), 800);
+      } else {
+        setStatus({ type: "error", text: data.error || "Invalid credentials." });
       }
-
-     
-      localStorage.setItem("token", data.token);
-
-      navigate("/dashboard");
     } catch (err) {
-      console.error("Login failed", err);
-      setError("Something went wrong");
+      console.error(err);
+      setLoading(false);
+      setStatus({ type: "error", text: "Cannot connect to server." });
     }
-  };
+  }
 
   return (
-    <div className="login-page">
-      <div className="login-card">
-        <h2>Sign in</h2>
-        <p>Use your account to sign in.</p>
+    <div className="form-card mx-auto" style={{ maxWidth: 520 }}>
+      <div className="card-header">
+        <div className="icon"><i className="bi bi-box-arrow-in-right"></i></div>
+        <div className="form-title">Sign in</div>
+        <div className="form-sub">Use your account to sign in.</div>
+      </div>
 
-        <form onSubmit={handleSubmit}>
-          <label>Email</label>
+      <form onSubmit={submit} noValidate>
+        <div className="form-group">
+          <label className="form-label" htmlFor="email">Email</label>
           <input
+            id="email"
             type="email"
-            placeholder="Enter email"
+            className="form-control"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
+            placeholder="Enter your email"
             required
           />
+        </div>
 
-          <label>Password</label>
+        <div className="form-group">
+          <label className="form-label" htmlFor="password">Password</label>
           <input
+            id="password"
             type="password"
-            placeholder="Enter password"
+            className="form-control"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
+            placeholder="Enter your password"
             required
           />
+        </div>
 
-          {error && <p className="error">{error}</p>}
+        {status.text && (
+          <div className={`mt-3 alert ${status.type === "success" ? "alert-success" : "alert-danger"}`}>
+            {status.text}
+          </div>
+        )}
 
-          <button type="submit">Sign in</button>
-        </form>
+        <button className="btn btn-primary mt-3" type="submit" disabled={loading}>
+          {loading ? "Signing in…" : "Sign in"}
+        </button>
 
-        <p className="forgot">
-          Forgot your password?{" "}
-          <span
-            className="link"
-            onClick={() => navigate("/forgot-password")}
-            style={{ cursor: "pointer", color: "#6c63ff" }}
-          >
-            Reset it.
-          </span>
-        </p>
-      </div>
+        <div className="note" style={{ marginTop: 12 }}>
+          Forgot your password? <a href="/forgot-password">Reset it</a>.
+        </div>
+
+        <div className="note" style={{ marginTop: 8 }}>
+          Don’t have an account? <a href="/register">Create one</a>.
+        </div>
+      </form>
     </div>
   );
 }
-
-export default Login;
