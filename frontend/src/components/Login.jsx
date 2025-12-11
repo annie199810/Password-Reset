@@ -1,5 +1,6 @@
+
 import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 
 export default function Login() {
   const [email, setEmail] = useState('');
@@ -63,7 +64,7 @@ export default function Login() {
 
         <button className="btn btn-primary mt-3" type="submit" disabled={loading}>{loading ? 'Signing in…' : 'Sign in'}</button>
         <div className="note" style={{ marginTop: 12 }}>
-          Forgot your password? <a href="/">Reset it</a>.
+          Forgot your password? <Link to="/forgot-password">Reset it</Link>.
         </div>
       </form>
     </div>
