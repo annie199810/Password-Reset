@@ -1,72 +1,86 @@
+import React, { useState } from "react";
+import { useNavigate } from "react-router-dom";
 
-import React, { useState } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
+const API_BASE = import.meta.env.VITE_API_BASE_URL || "";
 
-export default function Login() {
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [status, setStatus] = useState({ type: '', text: '' });
-  const [loading, setLoading] = useState(false);
+function Login() {
   const navigate = useNavigate();
 
-  async function submit(e) {
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [error, setError] = useState("");
+
+  const handleSubmit = async (e) => {
     e.preventDefault();
-    setStatus({ type: '', text: '' });
-
-    if (!email || !password) return setStatus({ type: 'error', text: 'Email and password are required.' });
-
-    setLoading(true);
-    const API = process.env.REACT_APP_API_URL || 'http://localhost:10000';
+    setError("");
 
     try {
-      const res = await fetch(`${API}/api/auth/login`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+      const res = await fetch(`${API_BASE}/auth/login`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email, password }),
       });
-      const data = await res.json();
-      setLoading(false);
 
-      if (res.ok) {
-        if (data.token) localStorage.setItem('token', data.token);
-        setStatus({ type: 'success', text: 'Login successful. Redirecting…' });
-        setTimeout(() => navigate('/'), 900);
-      } else {
-        setStatus({ type: 'error', text: data.error || 'Invalid credentials.' });
+      const data = await res.json();
+
+      if (!res.ok) {
+        setError(data.message || "Invalid credentials");
+        return;
       }
+
+     
+      localStorage.setItem("token", data.token);
+
+      navigate("/dashboard");
     } catch (err) {
-      console.error(err);
-      setLoading(false);
-      setStatus({ type: 'error', text: 'Cannot connect to server.' });
+      console.error("Login failed", err);
+      setError("Something went wrong");
     }
-  }
+  };
 
   return (
-    <div className="form-card mx-auto" style={{ maxWidth: 520 }}>
-      <div className="card-header">
-        <div className="icon"><i className="bi bi-box-arrow-in-right"></i></div>
-        <div className="form-title">Sign in</div>
-        <div className="form-sub">Use your account to sign in.</div>
+    <div className="login-page">
+      <div className="login-card">
+        <h2>Sign in</h2>
+        <p>Use your account to sign in.</p>
+
+        <form onSubmit={handleSubmit}>
+          <label>Email</label>
+          <input
+            type="email"
+            placeholder="Enter email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            required
+          />
+
+          <label>Password</label>
+          <input
+            type="password"
+            placeholder="Enter password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            required
+          />
+
+          {error && <p className="error">{error}</p>}
+
+          <button type="submit">Sign in</button>
+        </form>
+
+        <p className="forgot">
+          Forgot your password?{" "}
+          <span
+            className="link"
+            onClick={() => navigate("/forgot-password")}
+            style={{ cursor: "pointer", color: "#6c63ff" }}
+          >
+            Reset it.
+          </span>
+        </p>
       </div>
-
-      <form onSubmit={submit} noValidate>
-        <div className="form-group">
-          <label className="form-label" htmlFor="email">Email</label>
-          <input id="email" type="email" className="form-control" value={email} onChange={e => setEmail(e.target.value)} required />
-        </div>
-
-        <div className="form-group">
-          <label className="form-label" htmlFor="password">Password</label>
-          <input id="password" type="password" className="form-control" value={password} onChange={e => setPassword(e.target.value)} required />
-        </div>
-
-        {status.text && <div className={`mt-3 alert ${status.type === 'success' ? 'alert-success' : 'alert-danger'}`}>{status.text}</div>}
-
-        <button className="btn btn-primary mt-3" type="submit" disabled={loading}>{loading ? 'Signing in…' : 'Sign in'}</button>
-        <div className="note" style={{ marginTop: 12 }}>
-          Forgot your password? <Link to="/forgot-password">Reset it</Link>.
-        </div>
-      </form>
     </div>
   );
 }
+
+export default Login;
