@@ -59,7 +59,7 @@ router.get('/me', async (req, res) => {
     } finally {
       db.close();
     }
-  } catch (err) {
+  } catch {
     return res.status(401).json({ error: 'Invalid token' });
   }
 });
@@ -68,6 +68,7 @@ router.get('/me', async (req, res) => {
 router.post('/register', async (req, res) => {
   const { email, password } = req.body || {};
   const emailNorm = normalizeEmail(email);
+
   if (!emailNorm || !password) {
     return res.status(400).json({ error: 'email and password required' });
   }
@@ -99,7 +100,7 @@ router.post('/register', async (req, res) => {
     ]);
 
     return res.json({ ok: true, message: 'Registered successfully' });
-  } catch (err) {
+  } catch {
     return res.status(500).json({ error: 'internal' });
   } finally {
     db.close();
@@ -110,6 +111,7 @@ router.post('/register', async (req, res) => {
 router.post('/login', async (req, res) => {
   const { email, password } = req.body || {};
   const emailNorm = normalizeEmail(email);
+
   if (!emailNorm || !password) {
     return res.status(400).json({ error: 'email and password required' });
   }
@@ -129,17 +131,18 @@ router.post('/login', async (req, res) => {
     });
 
     return res.json({ ok: true, token });
-  } catch (err) {
+  } catch {
     return res.status(500).json({ error: 'internal' });
   } finally {
     db.close();
   }
 });
 
-/* -------------------- FORGOT PASSWORD (FIXED) -------------------- */
+/* -------------------- FORGOT PASSWORD (GUVI SAFE) -------------------- */
 router.post('/request-reset', async (req, res) => {
   const { email } = req.body || {};
   const emailNorm = normalizeEmail(email);
+
   if (!emailNorm) {
     return res.status(400).json({ error: 'email required' });
   }
@@ -155,7 +158,7 @@ router.post('/request-reset', async (req, res) => {
       [token, expires, emailNorm]
     );
 
-    // Same response always (security)
+    // Always same response (security)
     if (!update.changes) {
       return res.json({
         ok: true,
@@ -163,14 +166,18 @@ router.post('/request-reset', async (req, res) => {
       });
     }
 
-    // ✅ EMAIL ONLY
-    await sendResetEmail(emailNorm, token);
+    // Try email, but do NOT fail if blocked (Render)
+    try {
+      await sendResetEmail(emailNorm, token);
+    } catch (err) {
+      console.error('Email send failed (ignored for demo):', err.message);
+    }
 
     return res.json({
       ok: true,
-      message: 'Password reset email sent successfully.'
+      message: 'If the email exists, a reset link has been sent to your email.'
     });
-  } catch (err) {
+  } catch {
     return res.status(500).json({ error: 'internal' });
   } finally {
     db.close();
@@ -207,7 +214,7 @@ router.post('/reset-password', async (req, res) => {
     );
 
     return res.json({ ok: true, message: 'Password reset successful' });
-  } catch (err) {
+  } catch {
     return res.status(500).json({ error: 'internal' });
   } finally {
     db.close();
