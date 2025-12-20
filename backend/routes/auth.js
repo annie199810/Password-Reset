@@ -12,7 +12,7 @@ const DB_FILE = process.env.DB_FILE || path.join(__dirname, '..', 'users.sqlite'
 const BCRYPT_ROUNDS = Number(process.env.BCRYPT_ROUNDS) || 10;
 const JWT_SECRET = process.env.JWT_SECRET || 'dev_secret';
 
-/* -------------------- DB HELPERS -------------------- */
+
 function openDb(readonly = false) {
   return new sqlite3.Database(
     DB_FILE,
@@ -41,7 +41,7 @@ function normalizeEmail(raw) {
   return String(raw || '').trim().toLowerCase();
 }
 
-/* -------------------- ME -------------------- */
+
 router.get('/me', async (req, res) => {
   const auth = req.headers.authorization || '';
   const token = auth.startsWith('Bearer ') ? auth.slice(7) : null;
@@ -64,7 +64,7 @@ router.get('/me', async (req, res) => {
   }
 });
 
-/* -------------------- REGISTER -------------------- */
+
 router.post('/register', async (req, res) => {
   const { email, password } = req.body || {};
   const emailNorm = normalizeEmail(email);
@@ -107,7 +107,7 @@ router.post('/register', async (req, res) => {
   }
 });
 
-/* -------------------- LOGIN -------------------- */
+
 router.post('/login', async (req, res) => {
   const { email, password } = req.body || {};
   const emailNorm = normalizeEmail(email);
@@ -138,7 +138,7 @@ router.post('/login', async (req, res) => {
   }
 });
 
-/* -------------------- FORGOT PASSWORD (GUVI SAFE) -------------------- */
+
 router.post('/request-reset', async (req, res) => {
   const { email } = req.body || {};
   const emailNorm = normalizeEmail(email);
@@ -158,7 +158,7 @@ router.post('/request-reset', async (req, res) => {
       [token, expires, emailNorm]
     );
 
-    // Always same response (security)
+
     if (!update.changes) {
       return res.json({
         ok: true,
@@ -166,7 +166,7 @@ router.post('/request-reset', async (req, res) => {
       });
     }
 
-    // Try email, but do NOT fail if blocked (Render)
+   
     try {
       await sendResetEmail(emailNorm, token);
     } catch (err) {
@@ -184,7 +184,7 @@ router.post('/request-reset', async (req, res) => {
   }
 });
 
-/* -------------------- RESET PASSWORD -------------------- */
+
 router.post('/reset-password', async (req, res) => {
   const { token, email, password } = req.body || {};
   const emailNorm = normalizeEmail(email);
