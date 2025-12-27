@@ -1,57 +1,65 @@
-const nodemailer = require("nodemailer");
 const sgMail = require("@sendgrid/mail");
 
+// ENV check (important)
+if (!process.env.SENDGRID_API_KEY) {
+  console.warn("⚠️ SENDGRID_API_KEY not set");
+}
+
+sgMail.setApiKey(process.env.SENDGRID_API_KEY);
+
+const FROM_EMAIL =
+  process.env.FROM_EMAIL || "developerannie057@gmail.com";
 const FRONTEND_URL =
-  (process.env.FRONTEND_URL || "http://localhost:3000").replace(/\/$/, "");
+  process.env.FRONTEND_URL || "http://localhost:5173";
 
-async function sendResetEmail(email, token) {
-  const resetLink = `${FRONTEND_URL}/reset-password?token=${token}&email=${email}`;
+/**
+ * Send password reset email
+ * @param {string} toEmail
+ * @param {string} token
+ */
+async function sendResetEmail(toEmail, token) {
+  const resetLink = `${FRONTEND_URL}/reset?token=${token}&email=${encodeURIComponent(
+    toEmail
+  )}`;
 
-  // ✅ 1) TRY SENDGRID
-  if (process.env.SENDGRID_API_KEY) {
-    try {
-      sgMail.setApiKey(process.env.SENDGRID_API_KEY);
+  const msg = {
+    to: toEmail,
+    from: {
+      email: FROM_EMAIL,
+      name: "Secure App"
+    },
+    subject: "Password Reset Request",
+    html: `
+      <div style="font-family: Arial, sans-serif; line-height: 1.6">
+        <h2>Password Reset</h2>
+        <p>You requested to reset your password.</p>
+        <p>
+          <a href="${resetLink}"
+             style="
+               display:inline-block;
+               padding:10px 18px;
+               background:#6c5ce7;
+               color:#ffffff;
+               text-decoration:none;
+               border-radius:4px;">
+            Reset Password
+          </a>
+        </p>
+        <p>This link will expire in <b>1 hour</b>.</p>
+        <p>If you did not request this, please ignore this email.</p>
+        <hr />
+        <small>Secure App • Password Reset System</small>
+      </div>
+    `
+  };
 
-      await sgMail.send({
-        to: email,
-        from: process.env.EMAIL_USER,
-        subject: "Password Reset",
-        html: `
-          <h3>Password Reset</h3>
-          <p>Click below to reset your password:</p>
-          <a href="${resetLink}">${resetLink}</a>
-          <p>This link is valid for 1 hour.</p>
-        `
-      });
-
-      console.log("📧 Email sent via SendGrid");
-      return;
-    } catch (err) {
-      console.error("❌ SendGrid failed:", err.message);
-    }
-  }
-
-  // ✅ 2) FALLBACK — GMAIL SMTP
-  if (process.env.EMAIL_USER && process.env.EMAIL_PASS) {
-    const transporter = nodemailer.createTransport({
-      host: "smtp.gmail.com",
-      port: 465,
-      secure: true,
-      auth: {
-        user: process.env.EMAIL_USER,
-        pass: process.env.EMAIL_PASS
-      }
-    });
-
-    await transporter.sendMail({
-      from: process.env.EMAIL_USER,
-      to: email,
-      subject: "Password Reset",
-      text: `Reset your password: ${resetLink}`,
-      html: `<a href="${resetLink}">${resetLink}</a>`
-    });
-
-    console.log("📧 Email sent via Gmail SMTP");
+  try {
+    await sgMail.send(msg);
+    console.log("✅ Reset email sent to:", toEmail);
+  } catch (err) {
+    console.error("❌ SendGrid error:");
+    console.error(err.response?.body || err.message);
+    throw err;
   }
 }
 
