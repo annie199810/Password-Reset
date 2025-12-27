@@ -1,17 +1,16 @@
-const express = require('express');
-const crypto = require('crypto');
-const path = require('path');
-const sqlite3 = require('sqlite3').verbose();
-const bcrypt = require('bcrypt');
-const jwt = require('jsonwebtoken');
-const { sendResetEmail } = require('../utils/mailer');
+const express = require("express");
+const crypto = require("crypto");
+const path = require("path");
+const sqlite3 = require("sqlite3").verbose();
+const bcrypt = require("bcrypt");
+const jwt = require("jsonwebtoken");
+const { sendResetEmail } = require("../utils/mailer");
 
 const router = express.Router();
 
-const DB_FILE = process.env.DB_FILE || path.join(__dirname, '..', 'users.sqlite');
-const BCRYPT_ROUNDS = Number(process.env.BCRYPT_ROUNDS) || 10;
-const JWT_SECRET = process.env.JWT_SECRET || 'dev_secret';
-
+const DB_FILE = process.env.DB_FILE || path.join(__dirname, "..", "users.sqlite");
+const JWT_SECRET = process.env.JWT_SECRET || "dev_secret";
+const BCRYPT_ROUNDS = 10;
 
 function openDb(readonly = false) {
   return new sqlite3.Database(
@@ -31,47 +30,25 @@ function dbGet(db, sql, params = []) {
 function dbRun(db, sql, params = []) {
   return new Promise((resolve, reject) => {
     db.run(sql, params, function (err) {
-      if (err) return reject(err);
-      resolve(this);
+      if (err) reject(err);
+      else resolve(this);
     });
   });
 }
 
-function normalizeEmail(raw) {
-  return String(raw || '').trim().toLowerCase();
+function normalizeEmail(email) {
+  return String(email || "").trim().toLowerCase();
 }
 
-
-router.get('/me', async (req, res) => {
-  const auth = req.headers.authorization || '';
-  const token = auth.startsWith('Bearer ') ? auth.slice(7) : null;
-  if (!token) return res.status(401).json({ error: 'Missing token' });
-
-  try {
-    const payload = jwt.verify(token, JWT_SECRET);
-    const db = openDb(true);
-    try {
-      const row = await dbGet(db, 'SELECT id, email FROM users WHERE id = ?', [
-        payload.id
-      ]);
-      if (!row) return res.status(404).json({ error: 'User not found' });
-      return res.json({ ok: true, user: row });
-    } finally {
-      db.close();
-    }
-  } catch {
-    return res.status(401).json({ error: 'Invalid token' });
-  }
-});
-
-
-router.post('/register', async (req, res) => {
+/* =========================
+   REGISTER
+========================= */
+router.post("/register", async (req, res) => {
   const { email, password } = req.body || {};
   const emailNorm = normalizeEmail(email);
 
-  if (!emailNorm || !password) {
-    return res.status(400).json({ error: 'email and password required' });
-  }
+  if (!emailNorm || !password)
+    return res.status(400).json({ error: "email & password required" });
 
   const db = openDb();
   try {
@@ -86,136 +63,119 @@ router.post('/register', async (req, res) => {
       )`
     );
 
-    const existing = await dbGet(db, 'SELECT id FROM users WHERE email = ?', [
+    const existing = await dbGet(db, "SELECT id FROM users WHERE email=?", [
       emailNorm
     ]);
-    if (existing) {
-      return res.status(400).json({ error: 'Email already registered' });
-    }
+    if (existing)
+      return res.status(400).json({ error: "Email already exists" });
 
-    const hashed = await bcrypt.hash(password, BCRYPT_ROUNDS);
-    await dbRun(db, 'INSERT INTO users (email, password) VALUES (?, ?)', [
+    const hash = await bcrypt.hash(password, BCRYPT_ROUNDS);
+    await dbRun(db, "INSERT INTO users (email,password) VALUES (?,?)", [
       emailNorm,
-      hashed
+      hash
     ]);
 
-    return res.json({ ok: true, message: 'Registered successfully' });
-  } catch {
-    return res.status(500).json({ error: 'internal' });
+    res.json({ ok: true });
   } finally {
     db.close();
   }
 });
 
-
-router.post('/login', async (req, res) => {
+/* =========================
+   LOGIN
+========================= */
+router.post("/login", async (req, res) => {
   const { email, password } = req.body || {};
   const emailNorm = normalizeEmail(email);
 
-  if (!emailNorm || !password) {
-    return res.status(400).json({ error: 'email and password required' });
-  }
-
   const db = openDb(true);
   try {
-    const row = await dbGet(db, 'SELECT id, password FROM users WHERE email = ?', [
+    const user = await dbGet(db, "SELECT * FROM users WHERE email=?", [
       emailNorm
     ]);
-    if (!row) return res.status(400).json({ error: 'Invalid credentials' });
+    if (!user) return res.status(400).json({ error: "Invalid credentials" });
 
-    const ok = await bcrypt.compare(password, row.password);
-    if (!ok) return res.status(400).json({ error: 'Invalid credentials' });
+    const ok = await bcrypt.compare(password, user.password);
+    if (!ok) return res.status(400).json({ error: "Invalid credentials" });
 
-    const token = jwt.sign({ id: row.id, email: emailNorm }, JWT_SECRET, {
-      expiresIn: '7d'
-    });
-
-    return res.json({ ok: true, token });
-  } catch {
-    return res.status(500).json({ error: 'internal' });
+    const token = jwt.sign({ id: user.id }, JWT_SECRET, { expiresIn: "7d" });
+    res.json({ ok: true, token });
   } finally {
     db.close();
   }
 });
 
+/* =========================
+   FORGOT PASSWORD (⭐ MAIN ⭐)
+========================= */
+router.post("/request-reset", async (req, res) => {
+  const emailNorm = normalizeEmail(req.body.email);
+  if (!emailNorm)
+    return res.status(400).json({ error: "email required" });
 
-router.post('/request-reset', async (req, res) => {
-  const { email } = req.body || {};
-  const emailNorm = normalizeEmail(email);
-
-  if (!emailNorm) {
-    return res.status(400).json({ error: 'email required' });
-  }
-
-  const token = crypto.randomBytes(20).toString('hex');
-  const expires = Date.now() + 60 * 60 * 1000; // 1 hour
+  const token = crypto.randomBytes(20).toString("hex");
+  const expires = Date.now() + 60 * 60 * 1000;
 
   const db = openDb();
   try {
-    const update = await dbRun(
+    const result = await dbRun(
       db,
-      'UPDATE users SET reset_token = ?, reset_expires = ? WHERE email = ?',
+      "UPDATE users SET reset_token=?, reset_expires=? WHERE email=?",
       [token, expires, emailNorm]
     );
 
-
-    if (!update.changes) {
-      return res.json({
-        ok: true,
-        message: 'If the email exists, a reset link has been sent to your email.'
-      });
+    if (!result.changes) {
+      return res.json({ ok: true });
     }
 
-   
+    const resetLink = `${process.env.FRONTEND_URL}/reset-password?token=${token}&email=${emailNorm}`;
+
+    console.log("🔑 Reset token:", token);
+    console.log("🔗 Reset link:", resetLink);
+
     try {
       await sendResetEmail(emailNorm, token);
-    } catch (err) {
-      console.error('Email send failed (ignored for demo):', err.message);
+    } catch (e) {
+      console.error("Email error:", e.message);
     }
 
-    return res.json({
+    // ⭐ RETURN LINK FOR DEMO ⭐
+    res.json({
       ok: true,
-      message: 'If the email exists, a reset link has been sent to your email.'
+      demoResetLink: resetLink
     });
-  } catch {
-    return res.status(500).json({ error: 'internal' });
   } finally {
     db.close();
   }
 });
 
-
-router.post('/reset-password', async (req, res) => {
-  const { token, email, password } = req.body || {};
+/* =========================
+   RESET PASSWORD
+========================= */
+router.post("/reset-password", async (req, res) => {
+  const { email, token, password } = req.body || {};
   const emailNorm = normalizeEmail(email);
-
-  if (!token || !emailNorm || !password) {
-    return res.status(400).json({ error: 'token, email and password required' });
-  }
 
   const db = openDb();
   try {
-    const row = await dbGet(
+    const user = await dbGet(
       db,
-      'SELECT id, reset_expires FROM users WHERE reset_token = ? AND email = ?',
-      [token, emailNorm]
+      "SELECT id, reset_expires FROM users WHERE email=? AND reset_token=?",
+      [emailNorm, token]
     );
 
-    if (!row) return res.status(400).json({ error: 'Invalid token' });
-    if (row.reset_expires < Date.now()) {
-      return res.status(400).json({ error: 'Token expired' });
-    }
+    if (!user) return res.status(400).json({ error: "Invalid token" });
+    if (user.reset_expires < Date.now())
+      return res.status(400).json({ error: "Token expired" });
 
-    const hashed = await bcrypt.hash(password, BCRYPT_ROUNDS);
+    const hash = await bcrypt.hash(password, BCRYPT_ROUNDS);
     await dbRun(
       db,
-      'UPDATE users SET password = ?, reset_token = NULL, reset_expires = NULL WHERE id = ?',
-      [hashed, row.id]
+      "UPDATE users SET password=?, reset_token=NULL, reset_expires=NULL WHERE id=?",
+      [hash, user.id]
     );
 
-    return res.json({ ok: true, message: 'Password reset successful' });
-  } catch {
-    return res.status(500).json({ error: 'internal' });
+    res.json({ ok: true });
   } finally {
     db.close();
   }
