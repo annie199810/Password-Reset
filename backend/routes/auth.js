@@ -1,22 +1,21 @@
 const express = require("express");
 const crypto = require("crypto");
-const jwt = require("jsonwebtoken");
 const bcrypt = require("bcrypt");
+const jwt = require("jsonwebtoken");
 const path = require("path");
 const sqlite3 = require("sqlite3").verbose();
-
 const { sendResetEmail } = require("../utils/mailer");
 
 const router = express.Router();
 
-/* ================= ENV ================= */
+/* ================== CONFIG ================== */
 const DB_FILE =
   process.env.DB_FILE || path.join(__dirname, "..", "users.sqlite");
 
 const JWT_SECRET = process.env.JWT_SECRET || "dev_secret";
 const BCRYPT_ROUNDS = 10;
 
-/* ================= DB HELPERS ================= */
+/* ================== DB HELPERS ================== */
 function openDb(readonly = false) {
   return new sqlite3.Database(
     DB_FILE,
@@ -45,7 +44,7 @@ function normalizeEmail(email) {
   return String(email || "").trim().toLowerCase();
 }
 
-/* ================= REGISTER ================= */
+/* ================== REGISTER ================== */
 router.post("/register", async (req, res) => {
   const { email, password } = req.body;
   const emailNorm = normalizeEmail(email);
@@ -69,7 +68,7 @@ router.post("/register", async (req, res) => {
 
     const existing = await dbGet(
       db,
-      "SELECT id FROM users WHERE email=?",
+      "SELECT id FROM users WHERE email = ?",
       [emailNorm]
     );
     if (existing) {
@@ -77,38 +76,44 @@ router.post("/register", async (req, res) => {
     }
 
     const hash = await bcrypt.hash(password, BCRYPT_ROUNDS);
-    await dbRun(db, "INSERT INTO users (email,password) VALUES (?,?)", [
-      emailNorm,
-      hash
-    ]);
+    await dbRun(
+      db,
+      "INSERT INTO users (email, password) VALUES (?, ?)",
+      [emailNorm, hash]
+    );
 
     res.json({ ok: true, message: "Registered successfully" });
   } catch (err) {
-    console.error("REGISTER ERROR:", err);
-    res.status(500).json({ error: "Internal error" });
+    console.error("Register error:", err);
+    res.status(500).json({ error: "Server error" });
   } finally {
     db.close();
   }
 });
 
-/* ================= LOGIN ================= */
+/* ================== LOGIN ================== */
 router.post("/login", async (req, res) => {
   const { email, password } = req.body;
   const emailNorm = normalizeEmail(email);
+
+  if (!emailNorm || !password) {
+    return res.status(400).json({ error: "Email and password required" });
+  }
 
   const db = openDb(true);
   try {
     const user = await dbGet(
       db,
-      "SELECT id,password FROM users WHERE email=?",
+      "SELECT id, password FROM users WHERE email = ?",
       [emailNorm]
     );
+
     if (!user) {
       return res.status(400).json({ error: "Invalid credentials" });
     }
 
-    const ok = await bcrypt.compare(password, user.password);
-    if (!ok) {
+    const match = await bcrypt.compare(password, user.password);
+    if (!match) {
       return res.status(400).json({ error: "Invalid credentials" });
     }
 
@@ -120,14 +125,14 @@ router.post("/login", async (req, res) => {
 
     res.json({ ok: true, token });
   } catch (err) {
-    console.error("LOGIN ERROR:", err);
-    res.status(500).json({ error: "Internal error" });
+    console.error("Login error:", err);
+    res.status(500).json({ error: "Server error" });
   } finally {
     db.close();
   }
 });
 
-/* ================= REQUEST RESET (IMPORTANT) ================= */
+/* ================== REQUEST RESET ================== */
 router.post("/request-reset", async (req, res) => {
   const { email } = req.body;
   const emailNorm = normalizeEmail(email);
@@ -140,7 +145,6 @@ router.post("/request-reset", async (req, res) => {
   const expires = Date.now() + 60 * 60 * 1000; // 1 hour
 
   const db = openDb();
-
   try {
     const result = await dbRun(
       db,
@@ -148,47 +152,50 @@ router.post("/request-reset", async (req, res) => {
       [token, expires, emailNorm]
     );
 
-    console.log("🔄 Reset requested for:", emailNorm);
-
+    // Always return same message (security best practice)
     if (result.changes > 0) {
-      console.log("📤 Sending reset email...");
-      await sendResetEmail(emailNorm, token);
-      console.log("✅ Reset email sent");
-    } else {
-      console.log("⚠️ Email not found, skipping mail");
+      try {
+        await sendResetEmail(emailNorm, token);
+        console.log("✅ Reset email sent to:", emailNorm);
+      } catch (mailErr) {
+        console.error("❌ Email send failed:", mailErr);
+      }
     }
 
     res.json({
       ok: true,
-      message: "If the email exists, a reset link has been sent."
+      message: "If the email exists, a reset link has been sent"
     });
   } catch (err) {
-    console.error("RESET REQUEST ERROR:", err);
-    res.status(500).json({ error: "Internal error" });
+    console.error("Request reset error:", err);
+    res.status(500).json({ error: "Server error" });
   } finally {
     db.close();
   }
 });
 
-/* ================= RESET PASSWORD ================= */
+/* ================== RESET PASSWORD ================== */
 router.post("/reset-password", async (req, res) => {
   const { email, token, password } = req.body;
   const emailNorm = normalizeEmail(email);
 
   if (!emailNorm || !token || !password) {
-    return res.status(400).json({ error: "Missing fields" });
+    return res
+      .status(400)
+      .json({ error: "Email, token and password required" });
   }
 
   const db = openDb();
   try {
     const user = await dbGet(
       db,
-      "SELECT id, reset_expires FROM users WHERE email=? AND reset_token=?",
+      `SELECT id, reset_expires FROM users 
+       WHERE email=? AND reset_token=?`,
       [emailNorm, token]
     );
 
     if (!user) {
-      return res.status(400).json({ error: "Invalid token" });
+      return res.status(400).json({ error: "Invalid reset token" });
     }
 
     if (user.reset_expires < Date.now()) {
@@ -199,14 +206,16 @@ router.post("/reset-password", async (req, res) => {
 
     await dbRun(
       db,
-      "UPDATE users SET password=?, reset_token=NULL, reset_expires=NULL WHERE id=?",
+      `UPDATE users 
+       SET password=?, reset_token=NULL, reset_expires=NULL 
+       WHERE id=?`,
       [hash, user.id]
     );
 
     res.json({ ok: true, message: "Password reset successful" });
   } catch (err) {
-    console.error("RESET PASSWORD ERROR:", err);
-    res.status(500).json({ error: "Internal error" });
+    console.error("Reset password error:", err);
+    res.status(500).json({ error: "Server error" });
   } finally {
     db.close();
   }

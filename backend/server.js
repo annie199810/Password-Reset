@@ -1,166 +1,125 @@
-
-require("dotenv").config();
-const fs = require("fs");
-const path = require("path");
 const express = require("express");
-const cors = require("cors");
+const crypto = require("crypto");
 const sqlite3 = require("sqlite3").verbose();
 const bcrypt = require("bcrypt");
+const jwt = require("jsonwebtoken");
+const { sendResetEmail } = require("../utils/mailer");
 
+const router = express.Router();
+const DB_FILE = process.env.DB_FILE || "/tmp/users.sqlite";
+const JWT_SECRET = process.env.JWT_SECRET || "dev_secret";
+const BCRYPT_ROUNDS = 10;
 
-const app = express();
-
-
-process.on("uncaughtException", (err) => {
-  console.error(
-    "UNCAUGHT EXCEPTION:",
-    err && err.stack ? err.stack : err
-  );
-  process.exit(1);
-});
-
-process.on("unhandledRejection", (reason) => {
-  console.error(
-    "UNHANDLED REJECTION:",
-    reason && reason.stack ? reason.stack : reason
-  );
-});
-
-
-app.use(cors());
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
-
-
-const DB_FILE = process.env.DB_FILE || '/tmp/users.sqlite';
-
-
-try {
-  fs.mkdirSync(path.dirname(DB_FILE), { recursive: true });
-  fs.openSync(DB_FILE, "a");
-} catch (e) {
-  console.warn(
-    "Could not ensure DB file exists:",
-    e && e.message ? e.message : e
-  );
+function openDb() {
+  return new sqlite3.Database(DB_FILE);
 }
-console.log("Using DB file:", DB_FILE);
 
+function normalizeEmail(email) {
+  return String(email || "").trim().toLowerCase();
+}
 
-process.env.DB_FILE = DB_FILE;
+/* ---------------- REGISTER ---------------- */
+router.post("/register", async (req, res) => {
+  const { email, password } = req.body;
+  const emailNorm = normalizeEmail(email);
 
+  if (!emailNorm || !password)
+    return res.status(400).json({ error: "Email & password required" });
 
+  const db = openDb();
+  db.run(
+    `CREATE TABLE IF NOT EXISTS users (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      email TEXT UNIQUE,
+      password TEXT,
+      reset_token TEXT,
+      reset_expires INTEGER
+    )`
+  );
 
-
-app.use("/api/auth", require("./routes/auth"));
-
-
-const showTokenRoute = require("./routes/showTokenRoute");
-app.use("/api", showTokenRoute);
-
-
-const frontendBuild = path.join(__dirname, "..", "frontend", "build");
-
-if (fs.existsSync(frontendBuild)) {
-  app.use(express.static(frontendBuild));
-
-  app.get("*", (req, res) => {
-    
-    if (req.path.startsWith("/api")) {
-      return res.status(404).send({ error: "Not found" });
+  const hash = await bcrypt.hash(password, BCRYPT_ROUNDS);
+  db.run(
+    "INSERT INTO users (email, password) VALUES (?,?)",
+    [emailNorm, hash],
+    err => {
+      if (err) return res.status(400).json({ error: "Email exists" });
+      res.json({ ok: true });
     }
-    res.sendFile(path.join(frontendBuild, "index.html"));
-  });
-} else {
-  console.log("No frontend build found at", frontendBuild);
-}
+  );
+});
 
+/* ---------------- LOGIN ---------------- */
+router.post("/login", (req, res) => {
+  const { email, password } = req.body;
+  const emailNorm = normalizeEmail(email);
+  const db = openDb();
 
-async function seedTestUser() {
-  return new Promise((resolve) => {
-    const db = new sqlite3.Database(DB_FILE, (err) => {
-      if (err) {
-        console.error("Failed to open DB for seeding:", err);
-        return resolve();
+  db.get(
+    "SELECT * FROM users WHERE email=?",
+    [emailNorm],
+    async (err, user) => {
+      if (!user) return res.status(400).json({ error: "Invalid login" });
+
+      const ok = await bcrypt.compare(password, user.password);
+      if (!ok) return res.status(400).json({ error: "Invalid login" });
+
+      const token = jwt.sign({ id: user.id }, JWT_SECRET, {
+        expiresIn: "7d",
+      });
+
+      res.json({ ok: true, token });
+    }
+  );
+});
+
+/* ---------------- REQUEST RESET ---------------- */
+router.post("/request-reset", async (req, res) => {
+  const emailNorm = normalizeEmail(req.body.email);
+  if (!emailNorm)
+    return res.status(400).json({ error: "Email required" });
+
+  const token = crypto.randomBytes(32).toString("hex");
+  const expires = Date.now() + 60 * 60 * 1000;
+
+  const db = openDb();
+  db.run(
+    "UPDATE users SET reset_token=?, reset_expires=? WHERE email=?",
+    [token, expires, emailNorm],
+    async function () {
+      if (this.changes) {
+        await sendResetEmail(emailNorm, token);
       }
-    });
+      res.json({
+        ok: true,
+        message: "If the email exists, reset link has been sent",
+      });
+    }
+  );
+});
 
-    db.run(
-      `CREATE TABLE IF NOT EXISTS users (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        email TEXT UNIQUE,
-        password TEXT,
-        reset_token TEXT,
-        reset_expires INTEGER
-      )`,
-      (createErr) => {
-        if (createErr) {
-          console.error("Seed: create table error:", createErr);
-          try {
-            db.close();
-          } catch (_) {}
-          return resolve();
-        }
+/* ---------------- RESET PASSWORD ---------------- */
+router.post("/reset-password", async (req, res) => {
+  const { token, email, password } = req.body;
+  const emailNorm = normalizeEmail(email);
+  const db = openDb();
 
-        (async () => {
-          try {
-            const seedEmail = process.env.SEED_EMAIL || "test@example.com";
-            const seedPassword = process.env.SEED_PASSWORD || "Test@1234";
+  db.get(
+    "SELECT * FROM users WHERE email=? AND reset_token=?",
+    [emailNorm, token],
+    async (err, user) => {
+      if (!user) return res.status(400).json({ error: "Invalid token" });
+      if (user.reset_expires < Date.now())
+        return res.status(400).json({ error: "Token expired" });
 
-            const hashed = await bcrypt.hash(seedPassword, 10);
-
-            db.run(
-              "INSERT OR IGNORE INTO users (email, password) VALUES (?, ?)",
-              [seedEmail, hashed],
-              function (insertErr) {
-                if (insertErr) {
-                  console.error("Seed: insert error:", insertErr);
-                } else {
-                  console.log(
-                    `✅ Seeded ${seedEmail} — inserted=${this.changes}`
-                  );
-                }
-                try {
-                  db.close();
-                } catch (_) {}
-                resolve();
-              }
-            );
-          } catch (hashErr) {
-            console.error("Seed: hashing error:", hashErr);
-            try {
-              db.close();
-            } catch (_) {}
-            resolve();
-          }
-        })();
-      }
-    );
-  });
-}
-
-
-const PORT = Number(process.env.PORT) || 10000;
-
-seedTestUser()
-  .then(() => {
-    app.listen(PORT, () => {
-      console.log(
-        `Server running on ${PORT} (NODE_ENV=${
-          process.env.NODE_ENV || "development"
-        })`
+      const hash = await bcrypt.hash(password, BCRYPT_ROUNDS);
+      db.run(
+        "UPDATE users SET password=?, reset_token=NULL, reset_expires=NULL WHERE id=?",
+        [hash, user.id]
       );
-    });
-  })
-  .catch((err) => {
-    console.error("Seed failed, starting server anyway:", err);
-    app.listen(PORT, () => {
-      console.log(
-        `Server running on ${PORT} (NODE_ENV=${
-          process.env.NODE_ENV || "development"
-        })`
-      );
-    });
-  });
 
-module.exports = app;
+      res.json({ ok: true, message: "Password reset successful" });
+    }
+  );
+});
+
+module.exports = router;
