@@ -8,31 +8,40 @@ if (!SENDGRID_API_KEY) {
   console.error("❌ SENDGRID_API_KEY missing");
 }
 
+if (!FROM_EMAIL) {
+  console.error("❌ FROM_EMAIL missing");
+}
+
 sgMail.setApiKey(SENDGRID_API_KEY);
 
-async function sendResetEmail(toEmail, token) {
-  const resetLink = `${FRONTEND_URL}/reset-password?token=${token}&email=${encodeURIComponent(
-    toEmail
+async function sendResetEmail(to, token) {
+  const resetUrl = `${FRONTEND_URL}/reset-password?token=${token}&email=${encodeURIComponent(
+    to
   )}`;
 
+  console.log("📨 Attempting to send email to:", to);
+  console.log("🔗 Reset URL:", resetUrl);
+
   const msg = {
-    to: toEmail,
+    to,
     from: FROM_EMAIL,
-    subject: "Password Reset Request",
+    subject: "Reset your password",
     html: `
-      <h2>Password Reset</h2>
-      <p>You requested to reset your password.</p>
-      <p>
-        <a href="${resetLink}" target="_blank">
-          Click here to reset your password
-        </a>
-      </p>
-      <p>This link will expire in 1 hour.</p>
+      <h3>Password Reset</h3>
+      <p>Click below to reset your password:</p>
+      <a href="${resetUrl}">${resetUrl}</a>
+      <p>This link expires in 1 hour.</p>
     `,
   };
 
-  await sgMail.send(msg);
-  console.log("✅ Reset email sent to", toEmail);
+  try {
+    await sgMail.send(msg);
+    console.log("✅ EMAIL SENT SUCCESSFULLY");
+  } catch (error) {
+    console.error("❌ SENDGRID ERROR");
+    console.error(error.response?.body || error.message);
+    throw error;
+  }
 }
 
 module.exports = { sendResetEmail };
