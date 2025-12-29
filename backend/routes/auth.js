@@ -1,24 +1,51 @@
 const express = require("express");
 const crypto = require("crypto");
-const sqlite3 = require("sqlite3").verbose();
-const bcrypt = require("bcrypt");
 const jwt = require("jsonwebtoken");
+const bcrypt = require("bcrypt");
+const path = require("path");
+const sqlite3 = require("sqlite3").verbose();
+
 const { sendResetEmail } = require("../utils/mailer");
 
 const router = express.Router();
-const DB_FILE = process.env.DB_FILE || "/tmp/users.sqlite";
-const JWT_SECRET = process.env.JWT_SECRET;
+
+/* ================= ENV ================= */
+const DB_FILE =
+  process.env.DB_FILE || path.join(__dirname, "..", "users.sqlite");
+
+const JWT_SECRET = process.env.JWT_SECRET || "dev_secret";
 const BCRYPT_ROUNDS = 10;
 
-function openDb() {
-  return new sqlite3.Database(DB_FILE);
+/* ================= DB HELPERS ================= */
+function openDb(readonly = false) {
+  return new sqlite3.Database(
+    DB_FILE,
+    readonly
+      ? sqlite3.OPEN_READONLY
+      : sqlite3.OPEN_READWRITE | sqlite3.OPEN_CREATE
+  );
+}
+
+function dbGet(db, sql, params = []) {
+  return new Promise((resolve, reject) => {
+    db.get(sql, params, (err, row) => (err ? reject(err) : resolve(row)));
+  });
+}
+
+function dbRun(db, sql, params = []) {
+  return new Promise((resolve, reject) => {
+    db.run(sql, params, function (err) {
+      if (err) return reject(err);
+      resolve(this);
+    });
+  });
 }
 
 function normalizeEmail(email) {
   return String(email || "").trim().toLowerCase();
 }
 
-/* ---------------- REGISTER ---------------- */
+/* ================= REGISTER ================= */
 router.post("/register", async (req, res) => {
   const { email, password } = req.body;
   const emailNorm = normalizeEmail(email);
@@ -28,8 +55,9 @@ router.post("/register", async (req, res) => {
   }
 
   const db = openDb();
-  db.serialize(async () => {
-    db.run(
+  try {
+    await dbRun(
+      db,
       `CREATE TABLE IF NOT EXISTS users (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         email TEXT UNIQUE,
@@ -39,91 +67,149 @@ router.post("/register", async (req, res) => {
       )`
     );
 
-    const hash = await bcrypt.hash(password, BCRYPT_ROUNDS);
-    db.run(
-      "INSERT INTO users (email, password) VALUES (?,?)",
-      [emailNorm, hash],
-      err => {
-        if (err) return res.status(400).json({ error: "User exists" });
-        res.json({ ok: true });
-      }
+    const existing = await dbGet(
+      db,
+      "SELECT id FROM users WHERE email=?",
+      [emailNorm]
     );
-  });
+    if (existing) {
+      return res.status(400).json({ error: "Email already exists" });
+    }
+
+    const hash = await bcrypt.hash(password, BCRYPT_ROUNDS);
+    await dbRun(db, "INSERT INTO users (email,password) VALUES (?,?)", [
+      emailNorm,
+      hash
+    ]);
+
+    res.json({ ok: true, message: "Registered successfully" });
+  } catch (err) {
+    console.error("REGISTER ERROR:", err);
+    res.status(500).json({ error: "Internal error" });
+  } finally {
+    db.close();
+  }
 });
 
-/* ---------------- LOGIN ---------------- */
-router.post("/login", (req, res) => {
+/* ================= LOGIN ================= */
+router.post("/login", async (req, res) => {
   const { email, password } = req.body;
   const emailNorm = normalizeEmail(email);
 
-  const db = openDb();
-  db.get(
-    "SELECT * FROM users WHERE email = ?",
-    [emailNorm],
-    async (err, user) => {
-      if (!user) return res.status(400).json({ error: "Invalid login" });
-
-      const ok = await bcrypt.compare(password, user.password);
-      if (!ok) return res.status(400).json({ error: "Invalid login" });
-
-      const token = jwt.sign({ id: user.id }, JWT_SECRET, {
-        expiresIn: "7d",
-      });
-      res.json({ ok: true, token });
+  const db = openDb(true);
+  try {
+    const user = await dbGet(
+      db,
+      "SELECT id,password FROM users WHERE email=?",
+      [emailNorm]
+    );
+    if (!user) {
+      return res.status(400).json({ error: "Invalid credentials" });
     }
-  );
+
+    const ok = await bcrypt.compare(password, user.password);
+    if (!ok) {
+      return res.status(400).json({ error: "Invalid credentials" });
+    }
+
+    const token = jwt.sign(
+      { id: user.id, email: emailNorm },
+      JWT_SECRET,
+      { expiresIn: "7d" }
+    );
+
+    res.json({ ok: true, token });
+  } catch (err) {
+    console.error("LOGIN ERROR:", err);
+    res.status(500).json({ error: "Internal error" });
+  } finally {
+    db.close();
+  }
 });
 
-/* ---------------- FORGOT PASSWORD ---------------- */
+/* ================= REQUEST RESET (IMPORTANT) ================= */
 router.post("/request-reset", async (req, res) => {
-  const email = normalizeEmail(req.body.email);
-  if (!email) return res.json({ ok: true });
+  const { email } = req.body;
+  const emailNorm = normalizeEmail(email);
+
+  if (!emailNorm) {
+    return res.status(400).json({ error: "Email required" });
+  }
 
   const token = crypto.randomBytes(32).toString("hex");
-  const expires = Date.now() + 60 * 60 * 1000;
+  const expires = Date.now() + 60 * 60 * 1000; // 1 hour
 
   const db = openDb();
-  db.run(
-    "UPDATE users SET reset_token=?, reset_expires=? WHERE email=?",
-    [token, expires, email],
-    async function () {
-      if (this.changes) {
-        try {
-          await sendResetEmail(email, token);
-        } catch (e) {
-          console.error("❌ Mail error:", e.message);
-        }
-      }
-      res.json({
-        ok: true,
-        message: "If the email exists, reset link has been sent",
-      });
+
+  try {
+    const result = await dbRun(
+      db,
+      "UPDATE users SET reset_token=?, reset_expires=? WHERE email=?",
+      [token, expires, emailNorm]
+    );
+
+    console.log("🔄 Reset requested for:", emailNorm);
+
+    if (result.changes > 0) {
+      console.log("📤 Sending reset email...");
+      await sendResetEmail(emailNorm, token);
+      console.log("✅ Reset email sent");
+    } else {
+      console.log("⚠️ Email not found, skipping mail");
     }
-  );
+
+    res.json({
+      ok: true,
+      message: "If the email exists, a reset link has been sent."
+    });
+  } catch (err) {
+    console.error("RESET REQUEST ERROR:", err);
+    res.status(500).json({ error: "Internal error" });
+  } finally {
+    db.close();
+  }
 });
 
-/* ---------------- RESET PASSWORD ---------------- */
+/* ================= RESET PASSWORD ================= */
 router.post("/reset-password", async (req, res) => {
   const { email, token, password } = req.body;
   const emailNorm = normalizeEmail(email);
 
-  const db = openDb();
-  db.get(
-    "SELECT * FROM users WHERE email=? AND reset_token=?",
-    [emailNorm, token],
-    async (err, user) => {
-      if (!user) return res.status(400).json({ error: "Invalid token" });
-      if (user.reset_expires < Date.now())
-        return res.status(400).json({ error: "Token expired" });
+  if (!emailNorm || !token || !password) {
+    return res.status(400).json({ error: "Missing fields" });
+  }
 
-      const hash = await bcrypt.hash(password, BCRYPT_ROUNDS);
-      db.run(
-        "UPDATE users SET password=?, reset_token=NULL, reset_expires=NULL WHERE id=?",
-        [hash, user.id],
-        () => res.json({ ok: true })
-      );
+  const db = openDb();
+  try {
+    const user = await dbGet(
+      db,
+      "SELECT id, reset_expires FROM users WHERE email=? AND reset_token=?",
+      [emailNorm, token]
+    );
+
+    if (!user) {
+      return res.status(400).json({ error: "Invalid token" });
     }
-  );
+
+    if (user.reset_expires < Date.now()) {
+      return res.status(400).json({ error: "Token expired" });
+    }
+
+    const hash = await bcrypt.hash(password, BCRYPT_ROUNDS);
+
+    await dbRun(
+      db,
+      "UPDATE users SET password=?, reset_token=NULL, reset_expires=NULL WHERE id=?",
+      [hash, user.id]
+    );
+
+    res.json({ ok: true, message: "Password reset successful" });
+  } catch (err) {
+    console.error("RESET PASSWORD ERROR:", err);
+    res.status(500).json({ error: "Internal error" });
+  } finally {
+    db.close();
+  }
 });
 
 module.exports = router;
