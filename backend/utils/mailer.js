@@ -1,30 +1,38 @@
 const sgMail = require("@sendgrid/mail");
 
-sgMail.setApiKey(process.env.SENDGRID_API_KEY);
+const SENDGRID_API_KEY = process.env.SENDGRID_API_KEY;
+const FROM_EMAIL = process.env.FROM_EMAIL;
+const FRONTEND_URL = process.env.FRONTEND_URL;
+
+if (!SENDGRID_API_KEY) {
+  console.error("❌ SENDGRID_API_KEY missing");
+}
+
+sgMail.setApiKey(SENDGRID_API_KEY);
 
 async function sendResetEmail(toEmail, token) {
-  console.log("📨 SendGrid called for:", toEmail);
-
-  const resetLink = `${process.env.FRONTEND_URL}/reset-password?token=${token}&email=${toEmail}`;
+  const resetLink = `${FRONTEND_URL}/reset-password?token=${token}&email=${encodeURIComponent(
+    toEmail
+  )}`;
 
   const msg = {
     to: toEmail,
-    from: process.env.FROM_EMAIL,
-    subject: "Reset your password",
+    from: FROM_EMAIL,
+    subject: "Password Reset Request",
     html: `
-      <h3>Password Reset</h3>
-      <p>Click the link below:</p>
-      <a href="${resetLink}">${resetLink}</a>
+      <h2>Password Reset</h2>
+      <p>You requested to reset your password.</p>
+      <p>
+        <a href="${resetLink}" target="_blank">
+          Click here to reset your password
+        </a>
+      </p>
+      <p>This link will expire in 1 hour.</p>
     `,
   };
 
-  try {
-    await sgMail.send(msg);
-    console.log("✅ Email sent successfully to:", toEmail);
-  } catch (err) {
-    console.error("❌ SendGrid ERROR:", err.response?.body || err.message);
-    throw err;
-  }
+  await sgMail.send(msg);
+  console.log("✅ Reset email sent to", toEmail);
 }
 
 module.exports = { sendResetEmail };
