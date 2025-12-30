@@ -11,13 +11,13 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
-// health check
+
 app.get("/", (req, res) => {
   console.log("📡 Health check hit");
   res.send("Password Reset Backend Running");
 });
 
-// routes
+
 app.use("/api/auth", authRoutes);
 
 const PORT = process.env.PORT || 10000;
