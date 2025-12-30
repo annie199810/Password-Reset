@@ -1,46 +1,47 @@
 const sgMail = require("@sendgrid/mail");
 
-const SENDGRID_API_KEY = process.env.SENDGRID_API_KEY;
-const FROM_EMAIL = process.env.FROM_EMAIL;
-const FRONTEND_URL = process.env.FRONTEND_URL;
+console.log("✅ mailer.js loaded");
 
-if (!SENDGRID_API_KEY) {
-  console.error("❌ SENDGRID_API_KEY missing");
+if (!process.env.SENDGRID_API_KEY) {
+  console.error("❌ SENDGRID_API_KEY is missing");
+} else {
+  console.log("🔑 SENDGRID_API_KEY found");
 }
 
-if (!FROM_EMAIL) {
-  console.error("❌ FROM_EMAIL missing");
-}
+sgMail.setApiKey(process.env.SENDGRID_API_KEY);
 
-sgMail.setApiKey(SENDGRID_API_KEY);
+async function sendResetEmail(toEmail, token) {
+  console.log("📨 sendResetEmail called for:", toEmail);
 
-async function sendResetEmail(to, token) {
-  const resetUrl = `${FRONTEND_URL}/reset-password?token=${token}&email=${encodeURIComponent(
-    to
+  const resetLink = `${process.env.FRONTEND_URL}/reset-password?token=${token}&email=${encodeURIComponent(
+    toEmail
   )}`;
 
-  console.log("📨 Attempting to send email to:", to);
-  console.log("🔗 Reset URL:", resetUrl);
+  console.log("🔗 Reset link generated:", resetLink);
 
   const msg = {
-    to,
-    from: FROM_EMAIL,
-    subject: "Reset your password",
+    to: toEmail,
+    from: process.env.FROM_EMAIL,
+    subject: "Password Reset Request",
     html: `
-      <h3>Password Reset</h3>
-      <p>Click below to reset your password:</p>
-      <a href="${resetUrl}">${resetUrl}</a>
-      <p>This link expires in 1 hour.</p>
+      <h2>Password Reset</h2>
+      <p>Click the link below to reset your password:</p>
+      <a href="${resetLink}">${resetLink}</a>
+      <p>This link is valid for 1 hour.</p>
     `,
   };
 
   try {
     await sgMail.send(msg);
-    console.log("✅ EMAIL SENT SUCCESSFULLY");
-  } catch (error) {
-    console.error("❌ SENDGRID ERROR");
-    console.error(error.response?.body || error.message);
-    throw error;
+    console.log("✅ Email sent successfully to:", toEmail);
+  } catch (err) {
+    console.error("❌ SendGrid error occurred");
+    if (err.response) {
+      console.error(JSON.stringify(err.response.body, null, 2));
+    } else {
+      console.error(err.message);
+    }
+    throw err;
   }
 }
 
