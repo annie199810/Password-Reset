@@ -1,107 +1,89 @@
-🔐 Password Reset Application
+🔐 Forgot Password & Reset Password – Implementation Overview
 
-A secure authentication system with Login, Register, and Forgot Password functionality.
-The application demonstrates industry-standard password reset flow using token and expiry.
+This project implements a complete Forgot Password & Reset Password flow using JWT authentication and SendGrid email service.
 
-🚀 Live Demo
+🔄 Flow Description
 
-Frontend:
-https://pas-sec-app.netlify.app
+1.User enters their registered email address on the Forgot Password screen.
 
-Backend:
-https://password-reset-2-qkox.onrender.com
+2.Backend generates a secure JWT reset token, valid for 1 hour.
 
-🔑 Demo Credentials
-Email: test@example.com
-Password: test1234
+3.A password reset link is created containing the token and email.
 
-✨ Features Implemented
+4.The reset link is sent to the user via SendGrid.
 
-✅ User Registration
+5.For evaluation and testing purposes, the generated reset link is also displayed on the UI.
 
-✅ User Login with JWT authentication
+6.User opens the reset link and enters a new password.
 
-✅ Forgot Password flow
+7.Backend verifies the token and allows the password reset.
 
-✅ Secure password reset using token & expiry
+📧 Email Delivery Note (Important)
 
-✅ Reset link not exposed in browser
+Email sending is integrated using SendGrid.
 
-✅ Email-based reset logic implemented
+SendGrid returns HTTP 202 (Accepted), confirming the email request was successfully processed by the service.
 
-✅ Security best practices followed
+In free-tier / demo environments, email delivery may be delayed, filtered, or sent to spam.
 
-🔁 Forgot Password Flow (Explanation)
+👉 To ensure reviewers can fully test the feature, a Demo Reset Link is displayed on the UI after submitting the Forgot Password form.
 
-User clicks Forgot Password
+This approach ensures:
 
-User enters registered email
+✅ JWT token generation
 
-Backend generates:
+✅ Secure reset link creation
 
-Secure reset token
+✅ Reset password functionality
 
-Expiry time (1 hour)
+✅ End-to-end flow verification without email dependency
 
-Reset link is handled via email logic
+📸 Screenshots (Proof of Functionality)
 
-Browser always shows a generic success message:
+Screenshots are provided in the screenshots/ folder for verification:
 
-If the email exists, a reset link has been sent.
+1️⃣ Forgot Password Screen
 
+File: screenshots/forgot-password.png
 
-Reset link is never shown in the UI or API response
+Shows user entering email
 
-User resets password using token verification
+Displays success message after reset request
 
-⚠️ For demo deployment, email delivery may be restricted by the hosting platform.
-However, email logic and secure reset flow are fully implemented.
+Shows demo reset link for testing
 
-🔐 Security Measures
+2️⃣ Reset Password Screen
 
-Same response for valid/invalid emails (prevents email enumeration)
+File: screenshots/reset-password.png
 
-Reset tokens expire automatically
+Accessed using reset token
 
-Tokens cleared after password reset
+Allows user to enter and submit a new password
 
-Passwords stored using bcrypt hashing
+3️⃣ Backend API Test (Postman)
 
-JWT used for authenticated routes
+File: screenshots/postman-request-reset.png
 
-🛠 Tech Stack
+POST /api/auth/request-reset
 
-Frontend
+Returns 200 OK
 
-HTML, CSS, JavaScript
+Confirms backend endpoint is working correctly
 
-Deployed on Netlify
+✅ Summary
 
-Backend
+This implementation successfully demonstrates:
 
-Node.js
+Secure JWT-based password reset
 
-Express.js
+Backend and frontend integration
 
-SQLite
+Email service integration using SendGrid
 
-Nodemailer (email logic)
+Practical handling of demo environment limitations
 
-JWT Authentication
-
-Deployed on Render
-
-📝 Note for Evaluators
-
-Forgot password flow uses email-based logic
-
-Reset link is not exposed in browser
-
-Token + expiry mechanism implemented securely
-
-Email failures are handled gracefully for demo deployment
-
-✅ Conclusion
-
-This project demonstrates a real-world, secure password reset implementation
-following industry best practices.
+📁 Folder Structure (Screenshots)
+screenshots/
+├── forgot-password.png
+├── reset-password.png
+└── postman-request-reset.png
