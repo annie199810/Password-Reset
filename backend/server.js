@@ -11,10 +11,10 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
-// health check (Render needs this)
+// health check
 app.get("/", (req, res) => {
   console.log("📡 Health check hit");
-  res.send("Backend is running");
+  res.send("Password Reset Backend Running");
 });
 
 // routes

@@ -10,30 +10,28 @@ if (!process.env.SENDGRID_API_KEY) {
 
 sgMail.setApiKey(process.env.SENDGRID_API_KEY);
 
-async function sendResetEmail(to, resetLink) {
-  console.log("📨 Preparing email for:", to);
-  console.log("🔗 Reset link:", resetLink);
-
-  const msg = {
-    to,
-    from: process.env.FROM_EMAIL, // verified sender
-    subject: "Password Reset Request",
-    html: `
-      <h3>Password Reset</h3>
-      <p>Click below link to reset your password:</p>
-      <a href="${resetLink}">${resetLink}</a>
-      <p>If you didn’t request this, ignore this mail.</p>
-    `,
-  };
-
+async function sendResetEmail(toEmail, resetLink) {
   try {
+    console.log("📨 Preparing email for:", toEmail);
+
+    const msg = {
+      to: toEmail,
+      from: process.env.FROM_EMAIL, // must be verified in SendGrid
+      subject: "Password Reset Request",
+      html: `
+        <h2>Password Reset</h2>
+        <p>Click the link below to reset your password:</p>
+        <a href="${resetLink}">${resetLink}</a>
+        <p>This link is valid for 1 hour.</p>
+      `
+    };
+
     const response = await sgMail.send(msg);
-    console.log("✅ Email sent successfully");
     console.log("📧 SendGrid response:", response[0].statusCode);
+
     return true;
   } catch (err) {
-    console.error("❌ Email send failed");
-    console.error(err.response?.body || err.message);
+    console.error("❌ Email send failed:", err.response?.body || err);
     return false;
   }
 }
