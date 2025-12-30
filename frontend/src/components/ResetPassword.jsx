@@ -88,7 +88,6 @@ export default function ResetPassword() {
     }
   }
 
-  // ❌ Invalid link
   if (!token || !email) {
     return (
       <div className="form-card mx-auto text-center">
@@ -105,7 +104,7 @@ export default function ResetPassword() {
     );
   }
 
-  // ✅ Success screen
+  
   if (status.type === "success") {
     return (
       <div className="form-card mx-auto text-center">
@@ -120,7 +119,7 @@ export default function ResetPassword() {
     );
   }
 
-  // 🔐 Reset form
+  
   return (
     <div className="form-card mx-auto">
       <div className="card-header text-center">

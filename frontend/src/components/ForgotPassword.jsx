@@ -41,7 +41,7 @@ export default function ForgotPassword() {
           text: "If the email exists, a reset link has been sent."
         });
 
-        // 👇 SHOW LINK FOR DEMO
+       
         if (data.demoResetLink) {
           console.log("🔗 Demo reset link:", data.demoResetLink);
           setDemoLink(data.demoResetLink);
@@ -99,7 +99,7 @@ export default function ForgotPassword() {
           </div>
         )}
 
-        {/* 🔥 DEMO RESET LINK */}
+       
         {demoLink && (
           <div className="alert alert-warning mt-3">
             <strong>Demo Reset Link:</strong>
