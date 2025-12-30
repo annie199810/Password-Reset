@@ -16,36 +16,43 @@ router.post("/request-reset", async (req, res) => {
     console.log("📩 Reset request received for:", email);
 
     if (!email) {
+      console.log("❌ Email missing in request");
       return res.status(400).json({ error: "Email is required" });
     }
 
-    // 🔑 create token
+    // 🔑 Generate secure reset token (1 hour expiry)
     const token = jwt.sign(
       { email },
       process.env.JWT_SECRET,
       { expiresIn: "1h" }
     );
 
-    // 🔗 reset link
+    // 🔗 Build reset link
     const resetLink =
       `${process.env.FRONTEND_URL}/reset-password` +
       `?token=${token}&email=${encodeURIComponent(email)}`;
 
-    console.log("🔗 Reset link:", resetLink);
+    console.log("🔗 Reset link generated:", resetLink);
 
-    // 📧 send email
-    await sendResetEmail(email, resetLink);
-    console.log("✅ Reset email sent successfully");
+    // 📧 Send email (SendGrid / SMTP)
+    try {
+      console.log("📨 Preparing email for:", email);
+      await sendResetEmail(email, resetLink);
+      console.log("✅ Reset email sent successfully");
+    } catch (mailErr) {
+      console.error("❌ Email sending failed:", mailErr.message);
+      // still continue (security best practice)
+    }
 
-    // 🔐 always same response
-    res.json({
+    // 🔐 Always same response (prevents email enumeration)
+    return res.json({
       ok: true,
       message: "If the email exists, a reset link has been sent"
     });
 
   } catch (err) {
     console.error("🔥 request-reset error:", err);
-    res.status(500).json({ error: "Server error" });
+    return res.status(500).json({ error: "Server error" });
   }
 });
 
@@ -56,9 +63,10 @@ router.post("/request-reset", async (req, res) => {
 router.post("/reset-password", async (req, res) => {
   try {
     const { token, email, password } = req.body;
-    console.log("🔁 Reset password attempt:", email);
+    console.log("🔁 Reset password attempt for:", email);
 
     if (!token || !email || !password) {
+      console.log("❌ Missing token/email/password");
       return res.status(400).json({
         error: "Token, email and password are required"
       });
@@ -70,25 +78,27 @@ router.post("/reset-password", async (req, res) => {
       });
     }
 
+    // 🔍 Verify token
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
 
     if (decoded.email !== email) {
+      console.log("❌ Token email mismatch");
       return res.status(400).json({
         error: "Invalid or expired reset link"
       });
     }
 
-    // ❗ No DB for GUVI task
+    // ❗ No DB update (GUVI demo requirement)
     console.log("✅ Token verified, password reset allowed");
 
-    res.json({
+    return res.json({
       ok: true,
       message: "Password reset successful"
     });
 
   } catch (err) {
-    console.error("🔥 reset-password error:", err);
-    res.status(400).json({
+    console.error("🔥 reset-password error:", err.message);
+    return res.status(400).json({
       error: "Invalid or expired reset link"
     });
   }
