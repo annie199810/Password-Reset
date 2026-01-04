@@ -13,7 +13,6 @@ app.use(express.json());
 
 
 app.get("/", (req, res) => {
-  console.log("📡 Health check hit");
   res.send("Password Reset Backend Running");
 });
 
