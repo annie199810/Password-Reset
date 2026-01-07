@@ -28,7 +28,8 @@ export default function Login() {
 
     setLoading(true);
 
-    const API = process.env.REACT_APP_API_URL || "http://localhost:10000";
+    //const API = process.env.REACT_APP_API_URL || "http://localhost:10000";
+    const API = "https://password-reset-2-qkox.onrender.com";
 
     try {
       const res = await fetch(`${API}/api/auth/login`, {

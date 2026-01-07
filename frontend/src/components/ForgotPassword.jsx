@@ -2,7 +2,8 @@ import React, { useState } from "react";
 import { Link } from "react-router-dom";
 
 export default function ForgotPassword() {
-  const API = process.env.REACT_APP_API_URL || "http://localhost:10000";
+  //const API = process.env.REACT_APP_API_URL || "http://localhost:10000";
+  const API = "https://password-reset-2-qkox.onrender.com";
 
   const [email, setEmail] = useState("");
   const [loading, setLoading] = useState(false);

@@ -13,7 +13,8 @@ export default function ResetPassword() {
   const navigate = useNavigate();
   const redirectTimeoutRef = useRef(null);
 
-  const API = process.env.REACT_APP_API_URL || "http://localhost:10000";
+  //const API = process.env.REACT_APP_API_URL || "http://localhost:10000";
+  const API = "https://password-reset-2-qkox.onrender.com";
 
   useEffect(() => {
     console.log("🔐 ResetPassword loaded");
