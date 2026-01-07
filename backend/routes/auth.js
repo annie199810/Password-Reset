@@ -4,6 +4,16 @@ const express = require("express");
 const jwt = require("jsonwebtoken");
 const router = express.Router();
 
+
+router.get("/register", (req, res) => {
+  res.status(200).json({
+    message: "Register endpoint is working. Use POST to create account."
+  });
+});
+
+/* =======================
+   REGISTER (POST)
+   ======================= */
 router.post("/register", async (req, res) => {
   const { name, email, password } = req.body;
 
@@ -19,7 +29,9 @@ router.post("/register", async (req, res) => {
   });
 });
 
-
+/* =======================
+   LOGIN
+   ======================= */
 router.post("/login", async (req, res) => {
   const { email, password } = req.body;
 
@@ -42,37 +54,36 @@ router.post("/login", async (req, res) => {
   });
 });
 
-
+/* =======================
+   FORGOT PASSWORD
+   ======================= */
 router.post("/request-reset", async (req, res) => {
-  try {
-    const { email } = req.body;
+  const { email } = req.body;
 
-    if (!email) {
-      return res.status(400).json({ error: "Email is required" });
-    }
-
-    const token = jwt.sign(
-      { email },
-      process.env.JWT_SECRET,
-      { expiresIn: "1h" }
-    );
-
-    const resetLink =
-      `${process.env.FRONTEND_URL}/reset-password` +
-      `?token=${token}&email=${encodeURIComponent(email)}`;
-
-    res.json({
-      ok: true,
-      message: "If the email exists, a reset link has been sent",
-      demoResetLink: resetLink
-    });
-
-  } catch (err) {
-    res.status(500).json({ error: "Server error" });
+  if (!email) {
+    return res.status(400).json({ error: "Email is required" });
   }
+
+  const token = jwt.sign(
+    { email },
+    process.env.JWT_SECRET,
+    { expiresIn: "1h" }
+  );
+
+  const resetLink =
+    `${process.env.FRONTEND_URL}/reset-password` +
+    `?token=${token}&email=${encodeURIComponent(email)}`;
+
+  res.json({
+    ok: true,
+    message: "If the email exists, a reset link has been sent",
+    demoResetLink: resetLink
+  });
 });
 
-
+/* =======================
+   RESET PASSWORD
+   ======================= */
 router.post("/reset-password", async (req, res) => {
   try {
     const { token, email, password } = req.body;
@@ -101,7 +112,6 @@ router.post("/reset-password", async (req, res) => {
       ok: true,
       message: "Password reset successful"
     });
-
   } catch (err) {
     res.status(400).json({
       error: "Invalid or expired reset link"
