@@ -7,13 +7,12 @@ const router = express.Router();
 
 router.get("/register", (req, res) => {
   res.status(200).json({
+    ok: true,
     message: "Register endpoint is working. Use POST to create account."
   });
 });
 
-/* =======================
-   REGISTER (POST)
-   ======================= */
+
 router.post("/register", async (req, res) => {
   const { name, email, password } = req.body;
 
@@ -29,9 +28,7 @@ router.post("/register", async (req, res) => {
   });
 });
 
-/* =======================
-   LOGIN
-   ======================= */
+
 router.post("/login", async (req, res) => {
   const { email, password } = req.body;
 
@@ -54,14 +51,14 @@ router.post("/login", async (req, res) => {
   });
 });
 
-/* =======================
-   FORGOT PASSWORD
-   ======================= */
+
 router.post("/request-reset", async (req, res) => {
   const { email } = req.body;
 
   if (!email) {
-    return res.status(400).json({ error: "Email is required" });
+    return res.status(400).json({
+      error: "Email is required"
+    });
   }
 
   const token = jwt.sign(
@@ -81,9 +78,7 @@ router.post("/request-reset", async (req, res) => {
   });
 });
 
-/* =======================
-   RESET PASSWORD
-   ======================= */
+
 router.post("/reset-password", async (req, res) => {
   try {
     const { token, email, password } = req.body;
@@ -117,6 +112,23 @@ router.post("/reset-password", async (req, res) => {
       error: "Invalid or expired reset link"
     });
   }
+});
+
+
+router.get("/request-reset", (req, res) => {
+  res.status(200).json({
+    ok: true,
+    message:
+      "This endpoint works via POST. Please use the Forgot Password page to request a reset link."
+  });
+});
+
+router.get("/reset-password", (req, res) => {
+  res.status(200).json({
+    ok: true,
+    message:
+      "Password reset is handled via POST from the frontend Reset Password page."
+  });
 });
 
 module.exports = router;
