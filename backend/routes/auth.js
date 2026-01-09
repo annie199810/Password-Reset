@@ -2,7 +2,12 @@ console.log("✅ auth.js loaded");
 
 const express = require("express");
 const jwt = require("jsonwebtoken");
+const sgMail = require("@sendgrid/mail");
+
 const router = express.Router();
+
+
+sgMail.setApiKey(process.env.SENDGRID_API_KEY);
 
 
 router.get("/register", (req, res) => {
@@ -71,10 +76,28 @@ router.post("/request-reset", async (req, res) => {
     `${process.env.FRONTEND_URL}/reset-password` +
     `?token=${token}&email=${encodeURIComponent(email)}`;
 
+  try {
+    await sgMail.send({
+      to: email,
+      from: process.env.SENDER_EMAIL,
+      subject: "Password Reset Request",
+      html: `
+        <p>You requested a password reset.</p>
+        <p>Click the link below to reset your password:</p>
+        <a href="${resetLink}">Reset Password</a>
+        <p>This link expires in 1 hour.</p>
+      `
+    });
+  } catch (error) {
+    console.error("SendGrid Error:", error.response?.body || error);
+    return res.status(500).json({
+      error: "Failed to send reset email"
+    });
+  }
+
   res.json({
     ok: true,
-    message: "If the email exists, a reset link has been sent",
-    demoResetLink: resetLink
+    message: "If the email exists, a reset link has been sent"
   });
 });
 
