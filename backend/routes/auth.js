@@ -6,25 +6,9 @@ const nodemailer = require("nodemailer");
 
 const router = express.Router();
 
-
-let transporter;
-
-(async () => {
-  const testAccount = await nodemailer.createTestAccount();
-
-  transporter = nodemailer.createTransport({
-    host: testAccount.smtp.host,
-    port: testAccount.smtp.port,
-    secure: testAccount.smtp.secure,
-    auth: {
-      user: testAccount.user,
-      pass: testAccount.pass
-    }
-  });
-
-  console.log("✅ Ethereal email ready");
-})();
-
+const transporter = nodemailer.createTransport({
+  jsonTransport: true
+});
 
 router.post("/request-reset", async (req, res) => {
   console.log("🔹 STEP 1: /request-reset hit");
@@ -34,7 +18,6 @@ router.post("/request-reset", async (req, res) => {
     return res.status(400).json({ error: "Email required" });
   }
 
- 
   const token = jwt.sign(
     { email },
     process.env.JWT_SECRET,
@@ -47,7 +30,7 @@ router.post("/request-reset", async (req, res) => {
 
   try {
     const info = await transporter.sendMail({
-      from: '"Password Reset App" <no-reply@test.com>',
+      from: "Password Reset App <no-reply@password-reset.com>",
       to: email,
       subject: "Password Reset",
       html: `
@@ -57,12 +40,13 @@ router.post("/request-reset", async (req, res) => {
       `
     });
 
-    console.log("📧 Mail sent");
-    console.log("🔗 Preview URL:", nodemailer.getTestMessageUrl(info));
+    console.log("📧 Mock email sent");
+    console.log("🔗 Reset link (mock):", resetLink);
+    console.log("📄 Email payload:", info.message);
 
     res.json({
       ok: true,
-      message: "Reset link sent to email"
+      message: "Reset link generated (mock email)"
     });
 
   } catch (err) {
@@ -70,7 +54,6 @@ router.post("/request-reset", async (req, res) => {
     res.status(500).json({ error: "Email failed" });
   }
 });
-
 
 router.post("/reset-password", async (req, res) => {
   const { token, email, password } = req.body;
