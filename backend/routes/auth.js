@@ -22,47 +22,24 @@ let transporter;
     }
   });
 
-  console.log("✅ Ethereal Mail Account Ready");
+  console.log("✅ Ethereal email ready");
 })();
 
 
-router.post("/register", async (req, res) => {
-  const { name, email, password } = req.body;
-
-  if (!name || !email || !password) {
-    return res.status(400).json({ error: "All fields required" });
-  }
-
-  res.json({ ok: true, message: "User registered (demo)" });
-});
-
-
-router.post("/login", async (req, res) => {
-  const { email, password } = req.body;
-
-  if (!email || !password) {
-    return res.status(400).json({ error: "Email & password required" });
-  }
-
-  const token = jwt.sign({ email }, process.env.JWT_SECRET, {
-    expiresIn: "1h"
-  });
-
-  res.json({ ok: true, token });
-});
-
-
 router.post("/request-reset", async (req, res) => {
-  const { email } = req.body;
+  console.log("🔹 STEP 1: /request-reset hit");
 
+  const { email } = req.body;
   if (!email) {
-    return res.status(400).json({ error: "Email is required" });
+    return res.status(400).json({ error: "Email required" });
   }
 
-
-  const token = jwt.sign({ email }, process.env.JWT_SECRET, {
-    expiresIn: "15m"
-  });
+ 
+  const token = jwt.sign(
+    { email },
+    process.env.JWT_SECRET,
+    { expiresIn: "15m" }
+  );
 
   const resetLink =
     `${process.env.FRONTEND_URL}/reset-password` +
@@ -74,24 +51,23 @@ router.post("/request-reset", async (req, res) => {
       to: email,
       subject: "Password Reset",
       html: `
-        <p>You requested a password reset.</p>
-        <p>Click the link below:</p>
+        <p>Password reset requested.</p>
         <a href="${resetLink}">Reset Password</a>
-        <p>This link expires in 15 minutes.</p>
+        <p>Link expires in 15 minutes</p>
       `
     });
 
-    console.log("📧 Reset mail sent");
+    console.log("📧 Mail sent");
     console.log("🔗 Preview URL:", nodemailer.getTestMessageUrl(info));
 
     res.json({
       ok: true,
-      message: "Password reset link sent to email"
+      message: "Reset link sent to email"
     });
 
   } catch (err) {
-    console.error("Mail Error:", err);
-    res.status(500).json({ error: "Failed to send email" });
+    console.error("❌ Mail error:", err);
+    res.status(500).json({ error: "Email failed" });
   }
 });
 
@@ -110,11 +86,10 @@ router.post("/reset-password", async (req, res) => {
       return res.status(400).json({ error: "Invalid token" });
     }
 
-    if (password.length < 6) {
-      return res.status(400).json({ error: "Password too short" });
-    }
-
-    res.json({ ok: true, message: "Password reset successful" });
+    res.json({
+      ok: true,
+      message: "Password reset successful"
+    });
 
   } catch (err) {
     res.status(400).json({ error: "Token expired or invalid" });
