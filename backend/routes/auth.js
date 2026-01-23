@@ -58,13 +58,22 @@ router.post("/login", async (req, res) => {
 
 
 router.post("/request-reset", async (req, res) => {
+  console.log("🔹 STEP 1: /request-reset hit");
+
   const { email } = req.body;
+  console.log("🔹 STEP 2: Email from frontend:", email);
 
   if (!email) {
+    console.log("❌ STEP 2 FAILED: Email missing");
     return res.status(400).json({
       error: "Email is required"
     });
   }
+
+  console.log("🔹 STEP 3: ENV check");
+  console.log("   JWT_SECRET exists:", !!process.env.JWT_SECRET);
+  console.log("   SENDGRID_API_KEY exists:", !!process.env.SENDGRID_API_KEY);
+  console.log("   SENDER_EMAIL:", process.env.SENDER_EMAIL);
 
   const token = jwt.sign(
     { email },
@@ -76,8 +85,13 @@ router.post("/request-reset", async (req, res) => {
     `${process.env.FRONTEND_URL}/reset-password` +
     `?token=${token}&email=${encodeURIComponent(email)}`;
 
+  console.log("🔹 STEP 4: Reset link generated");
+  console.log("   Reset link:", resetLink);
+
   try {
-    await sgMail.send({
+    console.log("🔹 STEP 5: Calling SendGrid.send()");
+
+    const response = await sgMail.send({
       to: email,
       from: process.env.SENDER_EMAIL,
       subject: "Password Reset Request",
@@ -88,8 +102,23 @@ router.post("/request-reset", async (req, res) => {
         <p>This link expires in 1 hour.</p>
       `
     });
+
+    console.log("✅ STEP 6: SendGrid SUCCESS");
+    console.log("   SendGrid response:", response);
+
   } catch (error) {
-    console.error("SendGrid Error:", error.response?.body || error);
+    console.log("❌ STEP 6: SendGrid FAILED");
+
+    if (error.response) {
+      console.log("❌ SendGrid status:", error.response.statusCode);
+      console.log(
+        "❌ SendGrid body:",
+        JSON.stringify(error.response.body, null, 2)
+      );
+    } else {
+      console.log("❌ SendGrid error message:", error.message);
+    }
+
     return res.status(500).json({
       error: "Failed to send reset email"
     });
