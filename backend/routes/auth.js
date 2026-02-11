@@ -2,52 +2,41 @@ console.log("✅ auth.js loaded");
 
 const express = require("express");
 const jwt = require("jsonwebtoken");
-const nodemailer = require("nodemailer");
+const { sendResetEmail } = require("../utils/mailer");
 
 const router = express.Router();
-
-
-const transporter = nodemailer.createTransport({
-  service: "gmail",
-  auth: {
-    user: process.env.EMAIL_USER,
-    pass: process.env.EMAIL_PASS  
-  }
-});
 
 
 router.post("/request-reset", async (req, res) => {
   console.log("🔹 STEP 1: /request-reset hit");
 
   const { email } = req.body;
+
   if (!email) {
     return res.status(400).json({ error: "Email is required" });
   }
 
-  const token = jwt.sign(
-    { email },
-    process.env.JWT_SECRET,
-    { expiresIn: "15m" }
-  );
-
-  const resetLink =
-    `${process.env.FRONTEND_URL}/reset-password` +
-    `?token=${token}&email=${encodeURIComponent(email)}`;
-
   try {
-    await transporter.sendMail({
-      from: `"Password Reset App" <${process.env.EMAIL_USER}>`,
-      to: email,
-      subject: "Password Reset Request",
-      html: `
-        <p>You requested a password reset.</p>
-        <p>Click below:</p>
-        <a href="${resetLink}">Reset Password</a>
-        <p>This link expires in 15 minutes.</p>
-      `
-    });
+   
+    const token = jwt.sign(
+      { email },
+      process.env.JWT_SECRET,
+      { expiresIn: "15m" }
+    );
 
-    console.log("📧 Email sent to:", email);
+    const resetLink =
+      `${process.env.FRONTEND_URL}/reset-password` +
+      `?token=${token}&email=${encodeURIComponent(email)}`;
+
+   
+    const sent = await sendResetEmail(email, resetLink);
+
+    if (!sent) {
+      console.error("❌ Failed to send reset email");
+      return res.status(500).json({ error: "Failed to send reset email" });
+    }
+
+    console.log("📧 Reset email sent to:", email);
 
     return res.json({
       ok: true,
@@ -77,12 +66,13 @@ router.post("/reset-password", async (req, res) => {
       return res.status(400).json({ error: "Invalid reset link" });
     }
 
+    
     return res.json({
       ok: true,
       message: "Password reset successful"
     });
 
-  } catch {
+  } catch (err) {
     return res.status(400).json({
       error: "Reset link expired or invalid"
     });
