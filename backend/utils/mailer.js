@@ -1,37 +1,42 @@
-//console.log("✅ mailer.js loaded");
+const nodemailer = require("nodemailer");
 
-const sgMail = require("@sendgrid/mail");
+const transporter = nodemailer.createTransport({
+  host: process.env.BREVO_HOST,        
+  port: Number(process.env.BREVO_PORT),
+  secure: false, 
+  auth: {
+    user: process.env.BREVO_USER,     
+    pass: process.env.BREVO_PASS,      
+  },
+});
 
-if (!process.env.SENDGRID_API_KEY) {
-  //console.error("❌ SENDGRID_API_KEY missing");
-} else {
- // console.log("🔑 SENDGRID_API_KEY found");
-}
 
-sgMail.setApiKey(process.env.SENDGRID_API_KEY);
+transporter.verify((error, success) => {
+  if (error) {
+    console.error("❌ SMTP verify failed:", error);
+  } else {
+    console.log("✅ SMTP server is ready to send emails");
+  }
+});
 
 async function sendResetEmail(toEmail, resetLink) {
   try {
-   // console.log("📨 Preparing email for:", toEmail);
-
-    const msg = {
+    const info = await transporter.sendMail({
+      from: process.env.MAIL_FROM, 
       to: toEmail,
-      from: process.env.FROM_EMAIL, // must be verified in SendGrid
       subject: "Password Reset Request",
       html: `
         <h2>Password Reset</h2>
         <p>Click the link below to reset your password:</p>
         <a href="${resetLink}">${resetLink}</a>
         <p>This link is valid for 1 hour.</p>
-      `
-    };
+      `,
+    });
 
-    const response = await sgMail.send(msg);
-    //console.log("📧 SendGrid response:", response[0].statusCode);
-
+    console.log("📧 Email sent:", info.messageId);
     return true;
   } catch (err) {
-    //console.error("❌ Email send failed:", err.response?.body || err);
+    console.error("❌ Email send failed:", err);
     return false;
   }
 }
