@@ -49,35 +49,20 @@ router.post("/request-reset", async (req, res) => {
 
 
 
-router.post("/reset-password", async (req, res) => {
-  const { token, email, password } = req.body;
+router.post("/login", async (req, res) => {
+  const { email, password } = req.body;
 
-  if (!token || !email || !password) {
-    return res.status(400).json({
-      error: "Token, email and password are required"
-    });
+  if (!email || !password) {
+    return res.status(400).json({ error: "Email and password required" });
   }
 
-  try {
-    const decoded = jwt.verify(token, process.env.JWT_SECRET);
-
-    if (decoded.email !== email) {
-      return res.status(400).json({ error: "Invalid reset link" });
-    }
-
-
-
-    return res.json({
-      ok: true,
-      message: "Password reset successful"
-    });
-
-  } catch (err) {
-    return res.status(400).json({
-      error: "Reset link expired or invalid"
-    });
-  }
+  
+  return res.json({
+    ok: true,
+    message: "Login successful"
+  });
 });
+
 
 
 
