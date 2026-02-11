@@ -4,13 +4,12 @@ const path = require("path");
 
 const router = express.Router();
 
-const DB = process.env.DB_FILE || '/tmp/users.sqlite';
-
+const DB = process.env.DB_FILE || path.join("/tmp", "users.sqlite");
 
 router.get("/show-token", (req, res) => {
   const db = new sqlite3.Database(DB, (err) => {
     if (err) {
-      return res.status(500).json({ error: "DB open failed" });
+      return res.IncludeStatus(500).json({ error: "DB open failed" });
     }
   });
 

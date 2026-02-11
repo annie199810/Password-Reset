@@ -1,9 +1,17 @@
-// utils/mailer.js
-const fetch = require("node-fetch"); // if Node < 18
+// backend/utils/mailer.js
+
+// If Render is using Node 18+, fetch is global.
+// If not, install node-fetch: npm install node-fetch
+let fetchFn;
+try {
+  fetchFn = fetch; // Node 18+
+} catch {
+  fetchFn = require("node-fetch"); // Node < 18
+}
 
 async function sendResetEmail(toEmail, resetLink) {
   try {
-    const res = await fetch("https://api.brevo.com/v3/smtp/email", {
+    const res = await fetchFn("https://api.brevo.com/v3/smtp/email", {
       method: "POST",
       headers: {
         accept: "application/json",
@@ -26,13 +34,14 @@ async function sendResetEmail(toEmail, resetLink) {
       }),
     });
 
+    const text = await res.text();
+
     if (!res.ok) {
-      const errText = await res.text();
-      console.error("❌ Brevo API error:", errText);
+      console.error("❌ Brevo API error:", text);
       return false;
     }
 
-    console.log("📧 Email sent via Brevo API");
+    console.log("📧 Email sent via Brevo API:", text);
     return true;
   } catch (error) {
     console.error("❌ Brevo API request failed:", error);

@@ -17,7 +17,6 @@ router.post("/request-reset", async (req, res) => {
   }
 
   try {
-   
     const token = jwt.sign(
       { email },
       process.env.JWT_SECRET,
@@ -28,7 +27,6 @@ router.post("/request-reset", async (req, res) => {
       `${process.env.FRONTEND_URL}/reset-password` +
       `?token=${token}&email=${encodeURIComponent(email)}`;
 
-   
     const sent = await sendResetEmail(email, resetLink);
 
     if (!sent) {
@@ -66,7 +64,8 @@ router.post("/reset-password", async (req, res) => {
       return res.status(400).json({ error: "Invalid reset link" });
     }
 
-    
+  
+
     return res.json({
       ok: true,
       message: "Password reset successful"
