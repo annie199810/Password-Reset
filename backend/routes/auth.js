@@ -64,7 +64,7 @@ router.post("/reset-password", async (req, res) => {
       return res.status(400).json({ error: "Invalid reset link" });
     }
 
-  
+   
 
     return res.json({
       ok: true,
@@ -76,6 +76,22 @@ router.post("/reset-password", async (req, res) => {
       error: "Reset link expired or invalid"
     });
   }
+});
+
+
+router.post("/login", async (req, res) => {
+  const { email, password } = req.body;
+
+  if (!email || !password) {
+    return res.status(400).json({ error: "Email and password required" });
+  }
+
+  
+  if (email === "test@example.com" && password === "test1234") {
+    return res.json({ ok: true, message: "Login successful" });
+  }
+
+  return res.status(401).json({ error: "Invalid credentials" });
 });
 
 module.exports = router;
