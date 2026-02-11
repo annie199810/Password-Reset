@@ -1,42 +1,41 @@
-const nodemailer = require("nodemailer");
-
-const transporter = nodemailer.createTransport({
-  host: process.env.BREVO_HOST,
-  port: Number(process.env.BREVO_PORT),
-  secure: false,
-  auth: {
-    user: process.env.BREVO_USER,
-    pass: process.env.BREVO_PASS,
-  },
-});
-
-
-transporter.verify((error, success) => {
-  if (error) {
-    console.error("❌ SMTP verify failed:", error);
-  } else {
-    console.log("✅ SMTP server is ready to send emails");
-  }
-});
+// utils/mailer.js
+const fetch = require("node-fetch"); // if Node < 18
 
 async function sendResetEmail(toEmail, resetLink) {
   try {
-    const info = await transporter.sendMail({
-      from: process.env.MAIL_FROM, 
-      to: toEmail,
-      subject: "Password Reset Request",
-      html: `
-        <h2>Password Reset</h2>
-        <p>Click the link below to reset your password:</p>
-        <a href="${resetLink}">${resetLink}</a>
-        <p>This link is valid for 1 hour.</p>
-      `,
+    const res = await fetch("https://api.brevo.com/v3/smtp/email", {
+      method: "POST",
+      headers: {
+        accept: "application/json",
+        "api-key": process.env.BREVO_API_KEY,
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({
+        sender: {
+          name: "Password Reset App",
+          email: process.env.MAIL_FROM,
+        },
+        to: [{ email: toEmail }],
+        subject: "Password Reset Request",
+        htmlContent: `
+          <h2>Password Reset</h2>
+          <p>Click the link below to reset your password:</p>
+          <a href="${resetLink}">${resetLink}</a>
+          <p>This link is valid for 15 minutes.</p>
+        `,
+      }),
     });
 
-    console.log("📧 Email sent:", info.messageId);
+    if (!res.ok) {
+      const errText = await res.text();
+      console.error("❌ Brevo API error:", errText);
+      return false;
+    }
+
+    console.log("📧 Email sent via Brevo API");
     return true;
-  } catch (err) {
-    console.error("❌ Email send failed:", err);
+  } catch (error) {
+    console.error("❌ Brevo API request failed:", error);
     return false;
   }
 }
