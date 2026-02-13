@@ -6,19 +6,27 @@ const { sendResetEmail } = require("../utils/mailer");
 
 const router = express.Router();
 
+
+const users = {}; 
+
 router.post("/register", async (req, res) => {
   const { email, password } = req.body;
 
   if (!email || !password) {
-    return res.status(400).json({ error: "Email and password required" });
+    return res.status(400).json({ error: "Email & password required" });
   }
 
-  console.log("📝 New user registered:", email);
+  if (users[email]) {
+    return res.status(400).json({ error: "User already exists" });
+  }
 
- 
+  users[email] = password;
+
+  console.log("🟢 Registered:", email);
+
   return res.json({
     ok: true,
-    message: "Registration successful"
+    message: "Registered successfully"
   });
 });
 
@@ -30,14 +38,15 @@ router.post("/login", async (req, res) => {
     return res.status(400).json({ error: "Email and password required" });
   }
 
- 
-  if (email === "test@example.com" && password === "test1234") {
+  if (users[email] && users[email] === password) {
+    console.log("🟢 Login success:", email);
     return res.json({
       ok: true,
       message: "Login successful"
     });
   }
 
+  console.log("🔴 Login failed:", email);
   return res.status(401).json({ error: "Invalid credentials" });
 });
 
@@ -51,11 +60,15 @@ router.post("/request-reset", async (req, res) => {
     return res.status(400).json({ error: "Email is required" });
   }
 
+  if (!users[email]) {
+    console.log("⚠️ Reset requested for non-existing user:", email);
+  }
+
   try {
     const token = jwt.sign(
       { email },
       process.env.JWT_SECRET,
-      { expiresIn: "15m" }   
+      { expiresIn: "15m" }
     );
 
     const resetLink =
@@ -65,7 +78,6 @@ router.post("/request-reset", async (req, res) => {
     const sent = await sendResetEmail(email, resetLink);
 
     if (!sent) {
-      console.error("❌ Failed to send reset email");
       return res.status(500).json({ error: "Failed to send reset email" });
     }
 
@@ -75,6 +87,7 @@ router.post("/request-reset", async (req, res) => {
       ok: true,
       message: "If the email exists, a reset link has been sent."
     });
+
   } catch (err) {
     console.error("❌ Mail error:", err);
     return res.status(500).json({ error: "Failed to send reset email" });
@@ -100,13 +113,15 @@ router.post("/reset-password", async (req, res) => {
       return res.status(400).json({ error: "Invalid reset link" });
     }
 
-    console.log("✅ Password reset successful for:", email);
+    users[email] = password;   
 
-    
+    console.log("🔐 Password updated for:", email);
+
     return res.json({
       ok: true,
       message: "Password reset successful"
     });
+
   } catch (err) {
     console.error("❌ Token error:", err.message);
     return res.status(400).json({
