@@ -6,6 +6,41 @@ const { sendResetEmail } = require("../utils/mailer");
 
 const router = express.Router();
 
+router.post("/register", async (req, res) => {
+  const { email, password } = req.body;
+
+  if (!email || !password) {
+    return res.status(400).json({ error: "Email and password required" });
+  }
+
+  console.log("📝 New user registered:", email);
+
+ 
+  return res.json({
+    ok: true,
+    message: "Registration successful"
+  });
+});
+
+
+router.post("/login", async (req, res) => {
+  const { email, password } = req.body;
+
+  if (!email || !password) {
+    return res.status(400).json({ error: "Email and password required" });
+  }
+
+ 
+  if (email === "test@example.com" && password === "test1234") {
+    return res.json({
+      ok: true,
+      message: "Login successful"
+    });
+  }
+
+  return res.status(401).json({ error: "Invalid credentials" });
+});
+
 
 router.post("/request-reset", async (req, res) => {
   console.log("🔹 STEP 1: /request-reset hit");
@@ -20,7 +55,7 @@ router.post("/request-reset", async (req, res) => {
     const token = jwt.sign(
       { email },
       process.env.JWT_SECRET,
-      { expiresIn: "15m" }
+      { expiresIn: "15m" }   
     );
 
     const resetLink =
@@ -67,7 +102,7 @@ router.post("/reset-password", async (req, res) => {
 
     console.log("✅ Password reset successful for:", email);
 
-   
+    
     return res.json({
       ok: true,
       message: "Password reset successful"
@@ -78,24 +113,6 @@ router.post("/reset-password", async (req, res) => {
       error: "Reset link expired or invalid"
     });
   }
-});
-
-
-router.post("/login", async (req, res) => {
-  const { email, password } = req.body;
-
-  if (!email || !password) {
-    return res.status(400).json({ error: "Email and password required" });
-  }
-
-  if (email === "test@example.com" && password === "test1234") {
-    return res.json({
-      ok: true,
-      message: "Login successful"
-    });
-  }
-
-  return res.status(401).json({ error: "Invalid credentials" });
 });
 
 module.exports = router;
